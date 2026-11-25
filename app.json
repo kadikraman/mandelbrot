@@ -41,6 +41,9 @@
   "hatches": {
     "picture": [
       "web"
+    ],
+    "touch-bridge": [
+      "web"
     ]
   }
 }

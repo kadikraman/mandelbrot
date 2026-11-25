@@ -381,11 +381,9 @@ impl MandelSurface {
         self.refit();
     }
 
-    /// A panel opens or closes: the whole set refits; any other view moves by
-    /// half the panel's width, so what was centred in the free area stays centred.
     /// A touch the page forwards as `touch <phase> <x> <y>`, in canvas points.
-    /// Exact's web input drops a pointer whose id is negative, which iPhones
-    /// give touches, so the page sends those itself.
+    /// The page reads touches from touch events: Exact's pointer input drops an
+    /// iPhone's (its ids are negative), and Safari ends them at a drag's first move.
     fn forwarded_touch(&mut self, args: &str, at_ms: f64) {
         let mut parts = args.split_whitespace();
         let phase = match parts.next() {
@@ -710,6 +708,8 @@ impl Surface for MandelSurface {
 
     fn input(&mut self, event: &InputEvent) {
         match event {
+            // Touches come only as the page forwards them.
+            InputEvent::Pointer { kind: PointerKind::Touch, .. } => {}
             InputEvent::Pointer { id, phase, x, y, dx, dy, kind, buttons, alt_key, at_ms, .. } => {
                 self.alt_held = *alt_key;
                 self.pointer(*id, *phase, *x, *y, *dx, *dy, *kind, *buttons, *at_ms);
@@ -1372,14 +1372,28 @@ mod tests {
 
     #[test]
     fn a_finger_that_drifts_a_little_still_taps() {
-        for (kind, taps) in [(PointerKind::Touch, true), (PointerKind::Mouse, false)] {
-            let mut s = surface();
-            let step = s.target.step;
-            s.input(&pointer(PointerPhase::Down, 400.0, 300.0, kind, 0.0));
-            s.input(&pointer(PointerPhase::Move, 406.0, 306.0, kind, 40.0));
-            s.input(&pointer(PointerPhase::Up, 406.0, 306.0, kind, 80.0));
-            assert_eq!(s.target.step < step, taps, "{kind:?}");
-        }
+        let mut s = surface();
+        let step = s.target.step;
+        let message = |text: &str, at_ms: f64| InputEvent::Message { text: text.into(), at_ms };
+        s.input(&message("touch down 400 300", 0.0));
+        s.input(&message("touch move 406 306", 40.0));
+        s.input(&message("touch up 406 306", 80.0));
+        assert!(s.target.step < step);
+        // A mouse that moves as far drags.
+        let mut s = surface();
+        s.input(&pointer(PointerPhase::Down, 400.0, 300.0, PointerKind::Mouse, 0.0));
+        s.input(&pointer(PointerPhase::Move, 406.0, 306.0, PointerKind::Mouse, 40.0));
+        s.input(&pointer(PointerPhase::Up, 406.0, 306.0, PointerKind::Mouse, 80.0));
+        assert_eq!(s.target.step, step);
+    }
+
+    #[test]
+    fn exact_s_own_touch_events_are_ignored() {
+        let mut s = surface();
+        let step = s.target.step;
+        s.input(&pointer(PointerPhase::Down, 400.0, 300.0, PointerKind::Touch, 0.0));
+        s.input(&pointer(PointerPhase::Up, 400.0, 300.0, PointerKind::Touch, 80.0));
+        assert_eq!(s.target.step, step);
     }
 
     #[test]

@@ -5,6 +5,8 @@
 const hatches = {};
 import * as pictureHatch from './hatch-picture.js';
 hatches["picture"] = pictureHatch;
+import * as touchBridgeHatch from './hatch-touch-bridge.js';
+hatches["touch-bridge"] = touchBridgeHatch;
 // exact:hatches (exact hatch adds a word's line above this one)
 
 export function element(e) { hatches[e.hatch]?.element?.(e); }

@@ -244,21 +244,12 @@ component Mandelbrot
   state canvasDowns = 0
   state pageDowns = 0
   state lastDown = ""
-  // Exact's web input drops a pointer whose id is negative, which iPhones give
-  // touches; the page forwards those touches to the renderer itself.
-  action touchDown(e: PointerEvent)
+  action canvasDown(e: PointerEvent)
     canvasDowns = canvasDowns + 1
-    if e.pointerId < 0
-      postMessage(`touch down ${e.offsetX} ${e.offsetY}`, "mandel")
-  action touchMove(e: PointerEvent)
-    if e.pointerId < 0
-      postMessage(`touch move ${e.offsetX} ${e.offsetY}`, "mandel")
-  action touchUp(e: PointerEvent)
-    if e.pointerId < 0
-      postMessage(`touch up ${e.offsetX} ${e.offsetY}`, "mandel")
-  action touchCancel(e: PointerEvent)
-    if e.pointerId < 0
-      postMessage(`touch cancel ${e.offsetX} ${e.offsetY}`, "mandel")
+  // The picture hatch (modules/web) writes each touch on the canvas into the
+  // hidden touch-bridge field, as `touch <phase> <x> <y>`; it goes to the renderer.
+  action forwardTouch(text: string)
+    postMessage(text, "mandel")
   action seenOnPage(e: PointerEvent)
     pageDowns = pageDowns + 1
     lastDown = `${e.pointerType} #${e.pointerId} at ${round(e.clientX)},${round(e.clientY)}`
@@ -313,7 +304,8 @@ component Mandelbrot
   view
     main testId="root" width="100%" height="100%" position="relative" overflow="hidden" touch-action="none" background-color="#000000" color="#e6edf3" color-scheme="dark" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" key=key pointerdown=seenOnPage
       head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
-      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=(showBox and not phone), freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered pointerdown=touchDown pointermove=touchMove pointerup=touchUp pointercancel=touchCancel cursor=(zoomOut ? "zoom-out" : "zoom-in") touch-action="none" user-select="none" hatch="picture" position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=(showBox and not phone), freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered pointerdown=canvasDown cursor=(zoomOut ? "zoom-out" : "zoom-in") touch-action="none" user-select="none" hatch="picture" position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      input value="" input=forwardTouch hatch="touch-bridge" position="absolute" left=0 top=0 width=1 height=1 opacity=0 pointer-events="none" tabindex=-1 aria-hidden="true" testId="touch-bridge"
       if debug
         text `Page saw ${pageDowns} presses, the canvas ${canvasDowns}; last: ${lastDown}\nscreen ${viewport.width}×${viewport.height}, drawn ${view.presented ? "yes" : "no"}\n${view.inputLog == "" ? "Renderer: no events yet" : view.inputLog}` class=Mono position="absolute" top=140 left=12 right=12 padding=8 border-radius=8 font-size=11 line-height=1.5 white-space="pre-line" background-color="rgba(0, 0, 0, 0.75)" color="#7cfc9a" pointer-events="none" testId="input-log"
       if noGpu
