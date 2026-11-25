@@ -313,13 +313,13 @@ component Mandelbrot
   view
     main testId="root" width="100%" height="100%" position="relative" overflow="hidden" background-color="#000000" color="#e6edf3" color-scheme="dark" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" key=key pointerdown=seenOnPage
       head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
-      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered pointerdown=touchDown pointermove=touchMove pointerup=touchUp pointercancel=touchCancel cursor=(zoomOut ? "zoom-out" : "zoom-in") touch-action="none" position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=(showBox and not phone), freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered pointerdown=touchDown pointermove=touchMove pointerup=touchUp pointercancel=touchCancel cursor=(zoomOut ? "zoom-out" : "zoom-in") touch-action="none" position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
       if debug
         text `Page saw ${pageDowns} presses, the canvas ${canvasDowns}; last: ${lastDown}\nscreen ${viewport.width}×${viewport.height}, drawn ${view.presented ? "yes" : "no"}\n${view.inputLog == "" ? "Renderer: no events yet" : view.inputLog}` class=Mono position="absolute" top=140 left=12 right=12 padding=8 border-radius=8 font-size=11 line-height=1.5 white-space="pre-line" background-color="rgba(0, 0, 0, 0.75)" color="#7cfc9a" pointer-events="none" testId="input-log"
       if noGpu
         NoGpu(levels=levels, level=level, pickLevel=pickLevel, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone, still=still)
       else if phone
-        PhoneUi(view=view, height=viewport.height, levels=levels, level=level, pickLevel=pickLevel, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, stepsMoved=stepsMoved, setSteps=setSteps, resetSteps=resetSteps, still=still)
+        PhoneUi(view=view, height=viewport.height, levels=levels, level=level, pickLevel=pickLevel, zoomOut=zoomOut, pick=pick, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, stepsMoved=stepsMoved, setSteps=setSteps, resetSteps=resetSteps, still=still)
       else
         column class=Glass position="absolute" left=16 bottom=16 testId="explore"
           row align-items="center" gap=4 padding=6
@@ -592,8 +592,6 @@ component PhoneUi
     pickLevel: action
     zoomOut: bool
     pick: action
-    showBox: bool
-    toggleBox: action
     themes: Theme[]
     theme: number
     setTheme: action
@@ -665,8 +663,6 @@ component PhoneUi
       view class=Divider
       button class=Btn width=44 height=44 padding=0 press=reset aria-label="Reset" testId="reset"
         Icon(name="reset", size=20)
-      button class=Btn width=44 height=44 padding=0 aria-pressed=(showBox ? "true" : "false") press=toggleBox aria-label="Zoom box" testId="box"
-        Icon(name="box", size=20)
       button class=Btn width=44 height=44 padding=0 popovertarget="theme-menu" aria-label="Colours" testId="colours"
         Icon(name="palette", size=20)
     ThemeMenu(themes=themes, theme=theme, setTheme=setTheme)
