@@ -830,7 +830,10 @@ impl Surface for MandelSurface {
         }
         let max_iter = self.max_iter();
         let building = self.next.is_some() || self.reference.as_ref().is_some_and(|r| !r.orbit.done(max_iter as usize + 2));
-        let moving = easing || self.auto_running() || now - self.last_motion_ms < SETTLE_MS;
+        // A finger or button held after a drag may move again at any moment, so
+        // the sharp picture waits for it to lift.
+        let held = self.press.as_ref().is_some_and(|p| p.dragged);
+        let moving = easing || held || self.auto_running() || now - self.last_motion_ms < SETTLE_MS;
         if elapsed > 0.0 && elapsed < 1000.0 {
             if moving || self.banded {
                 if self.intervals.len() == 240 {
