@@ -657,16 +657,16 @@ component PhoneUi
     else
       setSheet(1)
   view
-    column class=Glass position="absolute" top=72 left=12 gap=4 padding="8px 12px 9px" testId="chip"
-      row align-items="center" gap=8
-        if view.sharp < 16
-          Ring(passes=view.sharp)
-        text "Zoom" class=Secondary font-size=13
-        text `${view.zoomLabel}×` class=Mono font-size=13 font-weight=500 font-variant-numeric="tabular-nums" testId="zoom"
+    // One short line under the dock: the zoom, and what a tap does.
+    row class=Glass position="absolute" top=72 left="50%" translate="-50% 0" align-items="center" gap=6 height=26 padding="0 10px" border-radius=13 white-space="nowrap" box-shadow="0 2px 10px rgba(0, 0, 0, 0.4)" testId="chip"
+      if view.sharp < 16
+        Ring(passes=view.sharp)
+      text `${view.zoomLabel}×` class=Mono font-size=12 font-weight=500 font-variant-numeric="tabular-nums" testId="zoom"
+      text "·" class=Secondary font-size=12
       if view.deepest
-        text "Deepest zoom: zoom out or pan" font-size=12 color="#ffb86b" role="status" testId="deepest"
+        text "Deepest zoom" font-size=12 color="#ffb86b" role="status" testId="deepest"
       else
-        text `Tap zooms ${zoomOut ? "out" : "in"} 4×` class=Secondary font-size=12
+        text `Tap to zoom ${zoomOut ? "out" : "in"}` class=Secondary font-size=12
     // The dock stays at the top, clear of the sheet, so it never moves as the sheet does.
     row class=Glass position="absolute" left="50%" translate="-50% 0" top=12 align-items="center" gap=4 padding=4 border-radius=14 testId="dock"
       row gap=2 padding=2 border-radius=10 background-color="rgba(255, 255, 255, 0.06)" role="radiogroup" aria-label="Tap to"
