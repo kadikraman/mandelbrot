@@ -11,6 +11,8 @@ test "a click zooms in, and in zoom-out mode the same click zooms back out"
 test "the explainer moves between chapters, opens its tiers, and hides"
   size 1440x900
   clock data
+  expect tree missing "explainer"
+  tap "show"
   expect text "chapter-title" == "One number and one rule"
   tap "code"
   expect tree has "maths"

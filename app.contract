@@ -196,7 +196,7 @@ component Mandelbrot
   state showBox = false
   state autoRun = 0
   state chapter = 0
-  state explainerOpen = true
+  state explainerOpen = false
   state contentsOpen = false
   state sheet = 0
   state codeOpen: number[] = []
@@ -338,11 +338,12 @@ component Mandelbrot
                   text `Next: ${titleAt(chapters, chapter + 1)}`
                   Icon(name="right", size=16)
         else
-          button class=Btn position="absolute" top=16 right=16 height=40 padding="0 12px" background-color="rgba(11, 15, 20, 0.86)" backdrop-filter="blur(16px) saturate(140%)" border="1px solid rgba(255, 255, 255, 0.10)" border-radius=12 press=toggleExplainer aria-keyshortcuts="E" testId="show"
-            Icon(name="book", size=16)
-            text "Explainer"
-            text `${chapter + 1}/${chapters.length}` class=Mono font-size=12 color="#9aa4ae"
-            text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" color="#9aa4ae"
+          row class=Glass position="absolute" top=16 right=16 padding=4
+            button class=Btn height=36 padding="0 10px" press=toggleExplainer aria-keyshortcuts="E" testId="show"
+              Icon(name="book", size=16)
+              text "Explainer"
+              text `${chapter + 1}/${chapters.length}` class=Mono font-size=12 color="#9aa4ae"
+              text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" color="#9aa4ae"
 
 // The Lucide icon of that name, in the current colour.
 component Icon
