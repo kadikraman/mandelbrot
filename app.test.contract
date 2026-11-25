@@ -12,8 +12,10 @@ test "the explainer switches levels, opens the code and the facts, and hides"
   size 1440x900
   clock data
   expect tree missing "explainer"
+  expect tree has "github"
   tap "show"
   expect text "explainer-title" == "Why is this cool?"
+  expect tree has "source"
   expect tree has "level-five"
   expect tree missing "code"
   tap "pick-some"

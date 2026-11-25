@@ -53,7 +53,8 @@ and how to run it; read it first.
   them at a drag's first move. With `?debug=1` the hatch also lists the browser's events.
 - **`assets/` holds the favicons (`icons` in `app.json`) and the share image `og.png`.**
 - **Icons are Lucide's shapes**, drawn inline by the `Icon` component. Take new ones from Lucide
-  too; `NOTICE` carries its licence.
+  too; `NOTICE` carries its licence. The one exception is GitHub's mark (`GitHubMark`), for the
+  links to this repository: Lucide has no brand icons.
 - **The README's pictures are in `docs/`.** Retake them when the look changes.
 - **Shaders are in `gpu/shaders/`.** `build.rs` generates their Rust bindings, so edit the WGSL and
   rebuild; never edit the generated code.
