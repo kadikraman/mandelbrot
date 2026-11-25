@@ -180,6 +180,10 @@ pub struct MandelSurface {
     input_log: Vec<String>,
     /// The last point of a touch the page forwards.
     forwarded_last: Option<(f32, f32)>,
+    /// Touch taps so far: the page marks each.
+    taps: u32,
+    /// The last tap's plane point, so its mark moves with the picture.
+    tap_point: (f64, f64),
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -241,6 +245,8 @@ impl Default for MandelSurface {
             free_right: 0.0,
             input_log: Vec::new(),
             forwarded_last: None,
+            taps: 0,
+            tap_point: (0.0, 0.0),
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -279,6 +285,11 @@ impl MandelSurface {
         (view.cx + dx * view.step, view.cy + dy * view.step)
     }
 
+    /// Where plane point `p` is in the canvas, in points: `plane_at` backwards.
+    fn screen_at(&self, view: View, (px, py): (f64, f64)) -> (f64, f64) {
+        ((px - view.cx) / view.step + self.size.0 as f64 * 0.5, self.size.1 as f64 * 0.5 - (py - view.cy) / view.step)
+    }
+
     fn ease_to(&mut self, target: View) {
         self.touched = true;
         self.ease = Some(Ease { from: self.view, start_ms: None });
@@ -296,12 +307,14 @@ impl MandelSurface {
         self.ease_to(self.target.scaled_about(px, py, factor));
     }
 
-    /// A touch tap zooms like a click, and the tapped point moves to the centre:
-    /// a phone has no box showing where a click lands.
+    /// A touch tap zooms like a click, and the tapped point moves to the centre,
+    /// where the page marks it: a phone has no box showing where a click lands.
     fn tap(&mut self, x: f32, y: f32, zoom_out: bool) {
         let (px, py) = self.plane_at(self.target, x, y);
         self.click(x, y, zoom_out);
         self.target = View { cx: px, cy: py, ..self.target };
+        self.taps += 1;
+        self.tap_point = self.plane_at(self.view, x, y);
     }
 
     /// The whole set, centred in the canvas. It ignores the explainer, so opening
@@ -605,6 +618,7 @@ impl MandelSurface {
             r.offset = (r.offset.0 - dx, r.offset.1 - dy);
         }
         self.auto_target = (self.auto_target.0 - dx, self.auto_target.1 - dy);
+        self.tap_point = (self.tap_point.0 - dx, self.tap_point.1 - dy);
     }
 
     /// Whether `r` can draw the view: enough bits, and near enough for dc's f32.
@@ -755,15 +769,19 @@ impl Surface for MandelSurface {
             return None;
         }
         let zoom = self.home_step / self.target.step;
+        let (tap_x, tap_y) = self.screen_at(self.view, self.tap_point);
         let mut sorted = self.intervals.clone();
         sorted.sort_by(f64::total_cmp);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
-            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
+            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","taps":{},"tapX":{:.1},"tapY":{:.1},"autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
             zoom,
             zoom_label(zoom),
             self.target.deepest(),
             self.input_log.join("\\n"),
+            self.taps,
+            tap_x,
+            tap_y,
             self.auto_running(),
             self.clicks,
             at(0.5),
@@ -1404,9 +1422,11 @@ mod tests {
         s.input(&message("touch down 200 150", 0.0));
         s.input(&message("touch up 200 150", 80.0));
         assert!(s.target.step < step);
-        // The tapped point is the new centre.
+        // The tapped point is the new centre, and its mark goes there with it.
         let (px, py) = s.plane_at(s.view, 200.0, 150.0);
         assert_eq!((s.target.cx, s.target.cy), (px, py));
+        assert_eq!(s.screen_at(s.view, s.tap_point), (200.0, 150.0));
+        assert_eq!(s.screen_at(s.target, s.tap_point), (400.0, 300.0));
         let zoomed = s.target;
         s.view = zoomed;
         s.ease = None;
