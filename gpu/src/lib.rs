@@ -150,6 +150,12 @@ pub struct MandelSurface {
     /// Whether the hover box is shown, as the panel's switch says.
     show_box: bool,
     auto_rate: f64,
+    /// The page's count of automatic zoom starts; a new one restarts a stopped zoom.
+    auto_run: f64,
+    /// A tap, drag or scroll stopped the automatic zoom.
+    auto_stopped: bool,
+    /// Canvas points on the right that a panel covers; the whole set fits left of them.
+    free_right: f32,
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -204,6 +210,9 @@ impl Default for MandelSurface {
             zoom_out_mode: false,
             show_box: false,
             auto_rate: 0.0,
+            auto_run: 0.0,
+            auto_stopped: false,
+            free_right: 0.0,
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -251,25 +260,53 @@ impl MandelSurface {
     /// A click zooms 4× in, or out, keeping the point under it where it is.
     /// Chained clicks add to an ease in flight.
     pub fn click(&mut self, x: f32, y: f32, zoom_out: bool) {
+        self.stop_auto();
         let (px, py) = self.plane_at(self.target, x, y);
         let factor = if zoom_out { CLICK_ZOOM } else { 1.0 / CLICK_ZOOM };
         self.clicks += 1;
         self.ease_to(self.target.scaled_about(px, py, factor));
     }
 
+    /// The whole set, centred in the canvas left of `free_right`.
+    fn home_view(&self) -> View {
+        let step = 3.2 / (self.size.0 - self.free_right).max(1.0) as f64;
+        let (ax, ay) = self.anchor_f64;
+        View { cx: HOME.0 - ax + self.free_right as f64 * 0.5 * step, cy: HOME.1 - ay, step }
+    }
+
     /// Back to the whole set.
     pub fn reset(&mut self) {
-        let (ax, ay) = self.anchor_f64;
-        self.ease_to(View { cx: HOME.0 - ax, cy: HOME.1 - ay, step: self.home_step });
+        self.ease_to(self.home_view());
+    }
+
+    fn auto_running(&self) -> bool {
+        self.auto_rate > 0.0 && !self.auto_stopped
+    }
+
+    fn set_auto_run(&mut self, run: f64) {
+        if run != self.auto_run {
+            self.auto_run = run;
+            self.auto_stopped = false;
+        }
+    }
+
+    /// The reader takes over: the automatic zoom stops until the page starts it again.
+    fn stop_auto(&mut self) {
+        if self.auto_running() {
+            self.auto_stopped = true;
+            self.dirty = true;
+        }
     }
 
     /// Wheel zoom keeps the point under the pointer fixed.
     pub fn wheel(&mut self, dy: f32, x: f32, y: f32) {
+        self.stop_auto();
         let (px, py) = self.plane_at(self.view, x, y);
         self.jump(self.view.scaled_about(px, py, (dy as f64 * 0.002).exp()));
     }
 
     fn pan(&mut self, dx: f32, dy: f32) {
+        self.stop_auto();
         let v = self.view;
         self.jump(View { cx: v.cx - dx as f64 * v.step, cy: v.cy + dy as f64 * v.step, ..v });
     }
@@ -303,10 +340,15 @@ impl MandelSurface {
     /// Before any gesture, the view refits the whole set to the new size.
     fn resize(&mut self, width: f32, height: f32) {
         self.size = (width, height);
-        self.home_step = 3.2 / width.max(1.0) as f64;
+        self.refit();
+    }
+
+    fn refit(&mut self) {
+        let home = self.home_view();
+        self.home_step = home.step;
         if !self.touched {
-            self.view.step = self.home_step;
-            self.target = self.view;
+            self.view = home;
+            self.target = home;
         }
         self.dirty = true;
     }
@@ -490,13 +532,21 @@ impl Surface for MandelSurface {
             ("iterScale", Value::Number(1.0)),
             ("bla", Value::Bool(true)),
             ("hoverBox", Value::Bool(false)),
+            ("autoRun", Value::Number(0.0)),
+            ("freeRight", Value::Number(0.0)),
         ]
     }
 
     fn bind(&mut self, inputs: &[Value], _: Option<f64>) -> Result<(), SurfaceError> {
-        let [max_iter, auto, zoom_out, iter_scale, bla, hover_box] = inputs else {
-            return Err(SurfaceError(format!("mandel: expected 6 inputs, got {}", inputs.len())));
+        let [max_iter, auto, zoom_out, iter_scale, bla, hover_box, auto_run, free_right] = inputs else {
+            return Err(SurfaceError(format!("mandel: expected 8 inputs, got {}", inputs.len())));
         };
+        self.set_auto_run(number(auto_run, "autoRun")?);
+        let free_right = number(free_right, "freeRight")?.max(0.0) as f32;
+        if free_right != self.free_right {
+            self.free_right = free_right;
+            self.refit();
+        }
         let Value::Bool(bla) = bla else {
             return Err(SurfaceError("mandel.bla: expected a boolean".into()));
         };
@@ -577,9 +627,18 @@ impl Surface for MandelSurface {
             InputEvent::Message { text, .. } => match text.as_str() {
                 "hover-off" => self.hover = None,
                 "reset" => self.reset(),
+                "zoom-in" | "zoom-out" => {
+                    let (w, h) = self.size;
+                    self.click((w - self.free_right) * 0.5, h * 0.5, text == "zoom-out");
+                }
                 _ => {
                     if let Some(args) = text.strip_prefix("goto ") {
                         self.goto(args);
+                    } else if let Some(args) = text.strip_prefix("pan ") {
+                        let mut parts = args.split_whitespace().map(str::parse::<f32>);
+                        if let (Some(Ok(dx)), Some(Ok(dy))) = (parts.next(), parts.next()) {
+                            self.pan(dx, dy);
+                        }
                     }
                 }
             },
@@ -596,8 +655,10 @@ impl Surface for MandelSurface {
         sorted.sort_by(f64::total_cmp);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
-            r#"{{"zoom":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
+            r#"{{"zoom":{},"zoomLabel":"{}","autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
             zoom,
+            zoom_label(zoom),
+            self.auto_running(),
             self.clicks,
             at(0.5),
             at(0.95),
@@ -638,7 +699,7 @@ impl Surface for MandelSurface {
         }
 
         let easing = self.step_ease(now);
-        if self.auto_rate > 0.0 && !easing {
+        if self.auto_running() && !easing {
             let factor = (-(self.auto_rate * elapsed / 1000.0) * std::f64::consts::LN_2).exp();
             let (tx, ty) = self.auto_target;
             self.view = self.view.scaled_about(tx, ty, factor);
@@ -652,7 +713,7 @@ impl Surface for MandelSurface {
         }
         let max_iter = self.max_iter();
         let building = self.next.is_some() || self.reference.as_ref().is_some_and(|r| !r.orbit.done(max_iter as usize + 2));
-        let moving = easing || self.auto_rate > 0.0 || now - self.last_motion_ms < SETTLE_MS;
+        let moving = easing || self.auto_running() || now - self.last_motion_ms < SETTLE_MS;
         if elapsed > 0.0 && elapsed < 1000.0 {
             if moving || self.banded {
                 if self.intervals.len() == 240 {
@@ -823,6 +884,33 @@ impl Surface for MandelSurface {
 }
 
 /// Sample `index`'s shift within the pixel, along the R2 sequence (Martin Roberts, 2018); the first is unshifted.
+/// A zoom for people: "4", "320,000", then "1.29 × 10²⁸" from a million.
+fn zoom_label(zoom: f64) -> String {
+    if zoom < 0.995 {
+        let digits = if zoom < 0.01 { 4 } else { 2 };
+        return format!("{zoom:.digits$}").trim_end_matches('0').to_string();
+    }
+    if zoom < 1e6 {
+        let digits = (zoom.round() as u64).to_string();
+        let mut out = String::new();
+        for (i, d) in digits.chars().enumerate() {
+            if i > 0 && (digits.len() - i) % 3 == 0 {
+                out.push(',');
+            }
+            out.push(d);
+        }
+        return out;
+    }
+    let mut exponent = zoom.log10().floor() as i32;
+    let mut mantissa = zoom / 10f64.powi(exponent);
+    if mantissa >= 9.995 {
+        mantissa /= 10.0;
+        exponent += 1;
+    }
+    let sup: String = exponent.to_string().chars().map(|d| "⁰¹²³⁴⁵⁶⁷⁸⁹".chars().nth(d.to_digit(10).unwrap() as usize).unwrap()).collect();
+    format!("{mantissa:.2} × 10{sup}")
+}
+
 fn jitter(index: u32) -> (f32, f32) {
     if index == 0 {
         return (0.0, 0.0);
@@ -1104,6 +1192,41 @@ mod tests {
                 println!("limit {max_iter} orbit {} offset ({dx:e},{dy:e}): direct {direct} perturbed {perturbed}", orbit.points.len());
             }
         }
+    }
+
+    #[test]
+    fn zoom_labels_read_as_people_write_them() {
+        assert_eq!(zoom_label(1.0), "1");
+        assert_eq!(zoom_label(0.25), "0.25");
+        assert_eq!(zoom_label(0.0625), "0.06");
+        assert_eq!(zoom_label(4.0), "4");
+        assert_eq!(zoom_label(320_000.0), "320,000");
+        assert_eq!(zoom_label(1.2864e28), "1.29 × 10²⁸");
+        assert_eq!(zoom_label(9.999e6), "1.00 × 10⁷");
+    }
+
+    #[test]
+    fn a_click_stops_the_automatic_zoom_until_the_page_starts_it_again() {
+        let mut s = surface();
+        s.auto_rate = 3.0;
+        s.set_auto_run(1.0);
+        s.click(400.0, 300.0, false);
+        assert!(!s.auto_running());
+        s.set_auto_run(1.0);
+        assert!(!s.auto_running());
+        s.set_auto_run(2.0);
+        assert!(s.auto_running());
+    }
+
+    #[test]
+    fn the_whole_set_centres_left_of_the_panel() {
+        let mut s = surface();
+        s.free_right = 400.0;
+        s.resize(1200.0, 800.0);
+        let (ax, _) = s.anchor_f64;
+        // The set's centre is in the middle of the 800 points left of the panel.
+        let (x, _) = s.plane_at(s.view, 400.0, 400.0);
+        assert!((x + ax - HOME.0).abs() < 1e-12);
     }
 
     #[test]

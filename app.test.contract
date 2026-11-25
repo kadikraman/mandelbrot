@@ -2,8 +2,23 @@ test "a click zooms in, and in zoom-out mode the same click zooms back out"
   expect tree has "set"
   tap "set"
   clock +1000
-  expect text "zoom" == "Zoom 4×"
+  expect text "zoom" == "4×"
   tap "mode-out"
   tap "set"
   clock +1000
-  expect text "zoom" == "Zoom 1×"
+  expect text "zoom" == "1×"
+
+test "the explainer moves between chapters, opens its tiers, and hides"
+  size 1440x900
+  clock data
+  expect text "chapter-title" == "One number and one rule"
+  tap "code"
+  expect tree has "maths"
+  tap "next"
+  expect text "chapter-title" == "Follow a point"
+  tap "step-1"
+  expect text "chapter-title" == "One number and one rule"
+  tap "hide"
+  expect tree missing "explainer"
+  tap "show"
+  expect tree has "explainer"

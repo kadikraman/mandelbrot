@@ -3,7 +3,8 @@
 An explorable Mandelbrot set for the web, with a deep zoom that stays sharp far past where
 ordinary floating point gives up. Built with [Exact](https://github.com/expo/exact) and WebGPU.
 
-> Work in progress. The page draws and zooms today; the explainer and the automatic zoom are next.
+> Work in progress. The explainer has its first two chapters; chapters 3 to 7 and the automatic
+> zoom's path to a tiny copy of the set are next.
 
 ## What it does
 
@@ -11,6 +12,11 @@ ordinary floating point gives up. Built with [Exact](https://github.com/expo/exa
   right-click zooms out. Drag pans and the wheel zooms.
 - **Deep zoom.** The set stays sharp past 10²⁸×. One point is computed at high precision on the
   CPU, and the GPU draws every other pixel as a small difference from it.
+- **An explainer beside the picture.** Seven short chapters, each with a plain text that is always
+  shown, and a code tier and a maths tier that open on request. On a phone it is a sheet.
+  The keyboard works too: E hides it, + and − zoom, the arrows pan.
+- **Readable without WebGPU.** Where the browser cannot draw the picture, the page becomes a
+  reading layout with a notice.
 - **Smooth while moving.** The view draws at a lower resolution while it moves, then sharpens to
   16 samples a pixel when it rests.
 
@@ -56,8 +62,10 @@ Run the Contract tests first: they generate the Rust workspace that `cargo test`
 ## Layout
 
 ```
-app.contract        the page: the canvas and its panel
+app.contract        the page: the canvas, the explore controls and the explainer
 app.test.contract   the page's tests
+content.ts          the chapters' text, code and maths
+app.ts              serves the chapters to the page
 app.json            the app's name, id and host
 gpu/                the renderer, a Rust crate on Exact's GPU surface
   src/              the view, the reference orbit, BLA and the GPU passes
