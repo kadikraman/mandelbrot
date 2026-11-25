@@ -27,7 +27,10 @@ use draw::{Gpu, Picture, SetPass, Show};
 
 const CLICK_ZOOM: f64 = 4.0;
 const EASE_MS: f64 = 400.0;
+/// How far a press may move and still be a tap, in points. A finger drifts
+/// further than a mouse (Android's touch slop is 8 dp).
 const TAP_SLOP: f32 = 6.0;
+const TOUCH_TAP_SLOP: f32 = 12.0;
 const TAP_MS: f64 = 500.0;
 /// A wheel or drag counts as motion this long after its last event.
 const SETTLE_MS: f64 = 150.0;
@@ -617,7 +620,8 @@ impl Surface for MandelSurface {
                     }
                     PointerPhase::Move => {
                         let Some(press) = self.press.as_mut().filter(|p| p.id == *id) else { return };
-                        if !press.dragged && ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt() > TAP_SLOP {
+                        let slop = if *kind == PointerKind::Touch { TOUCH_TAP_SLOP } else { TAP_SLOP };
+                        if !press.dragged && ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt() > slop {
                             press.dragged = true;
                         }
                         if press.dragged {
@@ -1279,6 +1283,22 @@ mod tests {
         assert_eq!(s.target, stopped);
         s.click(600.0, 150.0, true);
         assert!(s.target.step > stopped.step * 3.9);
+    }
+
+    fn pointer(phase: PointerPhase, x: f32, y: f32, kind: PointerKind, at_ms: f64) -> InputEvent {
+        InputEvent::Pointer { id: 1, phase, x, y, dx: 0.0, dy: 0.0, kind, buttons: 1, shift_key: false, ctrl_key: false, alt_key: false, meta_key: false, at_ms }
+    }
+
+    #[test]
+    fn a_finger_that_drifts_a_little_still_taps() {
+        for (kind, taps) in [(PointerKind::Touch, true), (PointerKind::Mouse, false)] {
+            let mut s = surface();
+            let step = s.target.step;
+            s.input(&pointer(PointerPhase::Down, 400.0, 300.0, kind, 0.0));
+            s.input(&pointer(PointerPhase::Move, 406.0, 306.0, kind, 40.0));
+            s.input(&pointer(PointerPhase::Up, 406.0, 306.0, kind, 80.0));
+            assert_eq!(s.target.step < step, taps, "{kind:?}");
+        }
     }
 
     #[test]
