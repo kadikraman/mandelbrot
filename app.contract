@@ -6,6 +6,7 @@ shape View
   zoom: number
   zoomLabel: string
   deepest: bool
+  inputLog: string
   sharp: number
   presented: bool
 
@@ -237,6 +238,8 @@ component Mandelbrot
   state noGpu = false
   derive phone = viewport.width < 720
   derive still = viewport.prefersReducedMotion
+  // ?debug=1 shows the renderer's log of pointer events, to debug input on a phone.
+  derive debug = searchParam(top(nav), "debug") == "1"
   derive current = levels.at(level)
   derive capped = stepsMoved and level == 1 and (phone ? sheet > 0 : explainerOpen)
   task gpuCheck mount
@@ -289,6 +292,8 @@ component Mandelbrot
     main testId="root" width="100%" height="100%" position="relative" overflow="hidden" background-color="#000000" color="#e6edf3" color-scheme="dark" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" key=key
       head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
       canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") touch-action="none" position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      if debug
+        text (view.inputLog == "" ? "Input log: tap the picture" : view.inputLog) class=Mono position="absolute" top=140 left=12 right=12 padding=8 border-radius=8 font-size=11 line-height=1.5 white-space="pre-line" background-color="rgba(0, 0, 0, 0.75)" color="#7cfc9a" pointer-events="none" testId="input-log"
       if noGpu
         NoGpu(levels=levels, level=level, pickLevel=pickLevel, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone, still=still)
       else if phone

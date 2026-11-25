@@ -102,6 +102,8 @@ struct Press {
     at_ms: f64,
     dragged: bool,
     zoom_out: bool,
+    moves: u32,
+    farthest: f32,
 }
 
 /// What a picture shows: a view at an iteration count, from a reference.
@@ -172,6 +174,7 @@ pub struct MandelSurface {
     auto_stopped: bool,
     /// Canvas points on the right that the explainer covers.
     free_right: f32,
+    input_log: Vec<String>,
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -231,6 +234,7 @@ impl Default for MandelSurface {
             auto_run: 0.0,
             auto_stopped: false,
             free_right: 0.0,
+            input_log: Vec::new(),
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -365,6 +369,15 @@ impl MandelSurface {
 
     /// A panel opens or closes: the whole set refits; any other view moves by
     /// half the panel's width, so what was centred in the free area stays centred.
+    /// The last few pointer events and what they did, for the page's `?debug=1` log.
+    fn note(&mut self, entry: String) {
+        if self.input_log.len() == 6 {
+            self.input_log.remove(0);
+        }
+        self.input_log.push(entry);
+        self.dirty = true;
+    }
+
     /// The explainer's width over the canvas; keyboard zoom centres on the area
     /// left of it.
     fn set_free_right(&mut self, free_right: f32) {
@@ -616,12 +629,16 @@ impl Surface for MandelSurface {
                     PointerPhase::Down => {
                         // The secondary button zooms out, whatever the mode.
                         let zoom_out = self.zooms_out() || buttons & 2 != 0;
-                        self.press = Some(Press { id: *id, x: *x, y: *y, at_ms: *at_ms, dragged: false, zoom_out });
+                        self.press = Some(Press { id: *id, x: *x, y: *y, at_ms: *at_ms, dragged: false, zoom_out, moves: 0, farthest: 0.0 });
+                        self.note(format!("down {kind:?} #{id} b{buttons}"));
                     }
                     PointerPhase::Move => {
                         let Some(press) = self.press.as_mut().filter(|p| p.id == *id) else { return };
                         let slop = if *kind == PointerKind::Touch { TOUCH_TAP_SLOP } else { TAP_SLOP };
-                        if !press.dragged && ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt() > slop {
+                        let far = ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt();
+                        press.moves += 1;
+                        press.farthest = press.farthest.max(far);
+                        if !press.dragged && far > slop {
                             press.dragged = true;
                         }
                         if press.dragged {
@@ -629,16 +646,27 @@ impl Surface for MandelSurface {
                         }
                     }
                     PointerPhase::Up => {
-                        if let Some(press) = self.press.take().filter(|p| p.id == *id) {
-                            if !press.dragged && at_ms - press.at_ms < TAP_MS {
-                                self.click(press.x, press.y, press.zoom_out);
+                        match self.press.take() {
+                            Some(press) if press.id == *id => {
+                                let held = at_ms - press.at_ms;
+                                let tap = !press.dragged && held < TAP_MS;
+                                let verdict = if tap { "tap" } else if press.dragged { "drag" } else { "too slow" };
+                                self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
+                                if tap {
+                                    self.click(press.x, press.y, press.zoom_out);
+                                }
                             }
+                            Some(press) => self.note(format!("up #{id}, but the press was #{}", press.id)),
+                            None => self.note(format!("up #{id} with no press")),
                         }
                         if *kind == PointerKind::Touch {
                             self.hover = None;
                         }
                     }
-                    PointerPhase::Cancel => self.press = None,
+                    PointerPhase::Cancel => {
+                        self.press = None;
+                        self.note(format!("cancel #{id}"));
+                    }
                 }
             }
             InputEvent::Wheel { dy, x, y, alt_key, .. } => {
@@ -649,7 +677,9 @@ impl Surface for MandelSurface {
             InputEvent::Key { code, down, .. } if code.starts_with("Alt") => self.alt_held = *down,
             InputEvent::Blur { .. } => {
                 self.alt_held = false;
-                self.press = None;
+                if self.press.take().is_some() {
+                    self.note("blur ended a press".into());
+                }
             }
             InputEvent::Message { text, .. } => match text.as_str() {
                 "hover-off" => self.hover = None,
@@ -682,10 +712,11 @@ impl Surface for MandelSurface {
         sorted.sort_by(f64::total_cmp);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
-            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
+            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
             zoom,
             zoom_label(zoom),
             self.target.deepest(),
+            self.input_log.join("\\n"),
             self.auto_running(),
             self.clicks,
             at(0.5),
