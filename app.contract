@@ -12,6 +12,7 @@ shape View
 shape Viewport
   width: number
   height: number
+  prefersReducedMotion: bool
 
 shape Run
   id: string
@@ -86,6 +87,7 @@ style Btn
   font-size = 13
   font-weight = 500
   white-space = "nowrap"
+  cursor = "pointer"
   transition = "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1)"
   :hover
     background-color = "rgba(255, 255, 255, 0.08)"
@@ -110,10 +112,12 @@ style Seg
   font-size = 13
   font-weight = 500
   white-space = "nowrap"
-  transition = "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1)"
+  cursor = "pointer"
+  transition = "background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 180ms cubic-bezier(0.4, 0, 0.2, 1)"
+  // Hover draws a ring and leaves the colours alone, so it never undoes the
+  // picked segment's white.
   :hover
-    background-color = "rgba(255, 255, 255, 0.08)"
-    color = "#e6edf3"
+    box-shadow = "inset 0 0 0 1px rgba(255, 255, 255, 0.22)"
   :checked
     background-color = "#e6edf3"
     color = "#0b0f14"
@@ -162,8 +166,31 @@ style Disclosure
   color = "#e6edf3"
   font-size = 15
   font-weight = 500
+  cursor = "pointer"
   :hover
     background-color = "rgba(255, 255, 255, 0.08)"
+  :focus-visible
+    box-shadow = "0 0 0 2px #4aa8ff"
+
+// A segment of the level switch: the sliding thumb behind it shows which is on.
+style LevelSeg
+  appearance = "none"
+  position = "relative"
+  flex = 1
+  display = "flex"
+  align-items = "center"
+  justify-content = "center"
+  padding = "0 8px"
+  border-radius = 6
+  background-color = "transparent"
+  color = "#9aa4ae"
+  font-size = 13
+  font-weight = 500
+  white-space = "nowrap"
+  cursor = "pointer"
+  transition = "color 240ms cubic-bezier(0.2, 0, 0, 1)"
+  :hover
+    color = "#e6edf3"
   :focus-visible
     box-shadow = "0 0 0 2px #4aa8ff"
 
@@ -175,6 +202,16 @@ style Well
   border-radius = 8
   background-color = "rgba(255, 255, 255, 0.06)"
   box-shadow = "inset 0 0 0 1px rgba(255, 255, 255, 0.10)"
+
+// The explainer slides in from the right edge, and back out.
+keyframes panelIn
+  from opacity=0 translate="24px 0px"
+keyframes panelOut
+  to opacity=0 translate="24px 0px" animation-timing-function="ease-in"
+keyframes fadeIn
+  from opacity=0
+keyframes rise
+  from opacity=0 translate="0px 6px"
 
 // One page, rendered at build time so its head (title, description and share
 // image) is in the HTML that link previews read.
@@ -199,6 +236,7 @@ component Mandelbrot
   state stepsMoved = false
   state noGpu = false
   derive phone = viewport.width < 720
+  derive still = viewport.prefersReducedMotion
   derive current = levels.at(level)
   derive capped = stepsMoved and level == 1 and (phone ? sheet > 0 : explainerOpen)
   task gpuCheck mount
@@ -226,6 +264,9 @@ component Mandelbrot
     codeOpen = not codeOpen
   action toggleMaths
     mathsOpen = not mathsOpen
+  action resetSteps
+    steps = 12
+    stepsMoved = false
   action setSteps(v: number)
     steps = v
     stepsMoved = true
@@ -249,9 +290,9 @@ component Mandelbrot
       head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
       canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
       if noGpu
-        NoGpu(levels=levels, level=level, pickLevel=pickLevel, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone)
+        NoGpu(levels=levels, level=level, pickLevel=pickLevel, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone, still=still)
       else if phone
-        PhoneUi(view=view, height=viewport.height, levels=levels, level=level, pickLevel=pickLevel, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
+        PhoneUi(view=view, height=viewport.height, levels=levels, level=level, pickLevel=pickLevel, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, stepsMoved=stepsMoved, setSteps=setSteps, resetSteps=resetSteps, still=still)
       else
         column class=Glass position="absolute" left=16 bottom=16 testId="explore"
           row align-items="center" gap=4 padding=6
@@ -287,7 +328,8 @@ component Mandelbrot
             text `Click zooms ${zoomOut ? "out" : "in"} 4×. Option-click or right-click zooms the other way.` class=Secondary font-size=12 line-height=1.3 padding="0 12px 8px"
           text (view.sharp < 16 ? `Sharpening: pass ${view.sharp + 1} of 16` : "") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
         if explainerOpen
-          column class=Glass position="absolute" top=16 right=16 bottom=16 width=400 overflow="hidden" testId="explainer"
+          column class=Glass position="absolute" top=16 right=16 bottom=16 width=400 overflow="hidden" animation=(still ? "none" : "panelIn 260ms cubic-bezier(0.2, 0, 0, 1) both") testId="explainer"
+            -exact-exit-animation="panelOut 180ms ease-in both"
             column gap=12 padding="12px 12px 12px 20px" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
               row align-items="center" gap=4
                 text "Why is it cool?" role="heading" aria-level=2 flex=1 font-size=17 font-weight=600 testId="explainer-title"
@@ -295,15 +337,15 @@ component Mandelbrot
                   Icon(name="panel", size=16)
                   text "Hide"
                   text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)"
-              LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false)
+              LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false, still=still)
             scroll flex=1 min-height=0 padding="20px 20px 24px"
               match current
                 case some(lv)
-                  LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps, live=true)
+                  LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, stepsMoved=stepsMoved, setSteps=setSteps, resetSteps=resetSteps, live=true, still=still)
                 case none
                   text ""
         else
-          row class=Glass position="absolute" top=16 right=16 padding=4
+          row class=Glass position="absolute" top=16 right=16 padding=4 animation=(still ? "none" : "fadeIn 200ms 120ms ease-out both")
             button class=Btn height=36 padding="0 10px" press=toggleExplainer aria-keyshortcuts="E" testId="show"
               Icon(name="book", size=16)
               text "Why is it cool?"
@@ -408,94 +450,109 @@ component LevelView
     toggleCode: action
     toggleMaths: action
     steps: number
+    // Until the reader moves the slider, the picture keeps its full detail.
+    stepsMoved: bool
     setSteps: action
+    resetSteps: action
     live: bool
+    still: bool
   view
-    article display="flex" flex-direction="column" gap=16 aria-label=lv.label testId=`level-${lv.id}`
-      if lv.formula != ""
-        text lv.formula class=MathFont font-style="italic" font-size=(lv.formula.length > 12 ? 22 : 30) text-align="center" padding="14px 0" border-top="1px solid rgba(255, 255, 255, 0.10)" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
-      for sec in lv.sections key=sec.id
-        column gap=10
-          text sec.title role="heading" aria-level=3 font-size=15 font-weight=600
-          for p in sec.paras key=p.id
-            text class=Para
-              Runs(runs=p.runs)
-      if lv.control == "steps"
-        column class=Well
-          row justify-content="space-between"
-            text "Steps to try" font-size=13 font-weight=500
-            text `${steps}` class=Mono font-size=13 font-variant-numeric="tabular-nums"
-          input type="range" min=1 max=200 step=1 value=steps accent-color="#e6edf3" input=setSteps disabled=(not live) aria-label="Steps to try" testId="steps"
-          text (live ? "Few steps give a blobby outline. More steps carve the edge. Watch the picture change as you drag." : "Needs the live picture. You can still read on.") class=Secondary font-size=12 line-height=1.4
-      if lv.code.length > 0
-        column border-top="1px solid rgba(255, 255, 255, 0.10)"
-          column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(codeOpen ? 16 : 0) gap=12
-            button class=Disclosure press=toggleCode aria-expanded=codeOpen testId="code"
-              row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
-                Icon(name="code", size=14)
-              text (codeOpen ? "Hide the code" : "Show the code") flex=1 text-align="left"
-              text lv.codeLang class=Mono font-size=12 color="#9aa4ae"
-              row class=Secondary
-                Icon(name=(codeOpen ? "up" : "down"), size=16)
-            if codeOpen
-              column border-radius=8 background-color="#0f1318" box-shadow="inset 0 0 0 1px #1f242c" overflow="hidden"
-                row height=32 align-items="center" padding="0 12px" border-bottom="1px solid #1f242c"
-                  text lv.codeFile class=Mono font-size=12 color="#9aa4ae"
-                column padding="12px 14px" overflow-x="auto"
-                  for l in lv.code key=l.id
-                    text class=Mono font-size=12.5 line-height=1.6 white-space="pre" min-height=20 padding-left=`${l.indent * 2}ch`
-                      for r in l.runs key=r.id
-                        if r.kind == "c"
-                          text r.text color="#9aa4ae" font-style="italic"
-                        else if r.kind == "k"
-                          text r.text color="#ff9bd2"
-                        else if r.kind == "n"
-                          text r.text color="#ffd36b"
-                        else if r.kind == "f"
-                          text r.text color="#7cc4ff"
-                        else
-                          text r.text
-      if lv.claims.length > 0
-        column border-top="1px solid rgba(255, 255, 255, 0.10)"
-          column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(mathsOpen ? 16 : 0) gap=12
-            button class=Disclosure press=toggleMaths aria-expanded=mathsOpen testId="maths"
-              row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
-                Icon(name="sigma", size=14)
-              text (mathsOpen ? "Hide the maths" : "Show the maths") flex=1 text-align="left"
-              text `${lv.claims.length} ${lv.claims.length == 1 ? "fact" : "facts"}` class=Mono font-size=12 color="#9aa4ae"
-              row class=Secondary
-                Icon(name=(mathsOpen ? "up" : "down"), size=16)
-            if mathsOpen
-              column gap=14
-                for c in lv.claims key=c.id
-                  row gap=8
-                    text c.id.slice(1) class=Mono font-size=12 color="#9aa4ae" width=20 line-height=1.9 flex-shrink=0
-                    column gap=4 flex=1 min-width=0
-                      text font-weight=500 class=Para
-                        Runs(runs=c.stmt)
-                      text font-size=13 line-height=1.5 color="#9aa4ae"
-                        Runs(runs=c.why)
-                text "Sources" class=Eyebrow
-                column gap=6
-                  for s in lv.sources key=s.id
-                    if s.href != ""
-                      link href=s.href font-size=13 color="#4aa8ff" text-decoration="underline"
-                        text s.text
-                    else
-                      text s.text font-size=13
+    // Keyed by the level, so a new level is a new node and plays its entrance.
+    for shown in [lv.id] key=shown
+      article display="flex" flex-direction="column" gap=16 aria-label=lv.label animation=(still ? "none" : "rise 220ms cubic-bezier(0.2, 0, 0, 1) both") testId=`level-${lv.id}`
+        if lv.formula != ""
+          text lv.formula class=MathFont font-style="italic" font-size=(lv.formula.length > 12 ? 22 : 30) text-align="center" padding="14px 0" border-top="1px solid rgba(255, 255, 255, 0.10)" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
+        for sec in lv.sections key=sec.id
+          column gap=10
+            text sec.title role="heading" aria-level=3 font-size=15 font-weight=600
+            for p in sec.paras key=p.id
+              text class=Para
+                Runs(runs=p.runs)
+        if lv.control == "steps"
+          column class=Well
+            row justify-content="space-between" align-items="center" min-height=28
+              text "Steps to try" font-size=13 font-weight=500
+              row align-items="center" gap=6
+                text (stepsMoved ? `${steps}` : "Full detail") class=Mono font-size=13 font-variant-numeric="tabular-nums" testId="steps-value"
+                if stepsMoved
+                  button class=Btn height=28 padding="0 8px" font-size=12 press=resetSteps aria-label="Reset the steps to full detail" testId="steps-reset"
+                    Icon(name="reset", size=14)
+                    text "Reset"
+            input type="range" min=1 max=200 step=1 value=(stepsMoved ? steps : 200) accent-color="#e6edf3" input=setSteps disabled=(not live) aria-label="Steps to try" testId="steps"
+            text (live ? "Few steps give a blobby outline. More steps carve the edge. Watch the picture change as you drag." : "Needs the live picture. You can still read on.") class=Secondary font-size=12 line-height=1.4
+        if lv.code.length > 0
+          column border-top="1px solid rgba(255, 255, 255, 0.10)"
+            column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(codeOpen ? 16 : 0) gap=12
+              button class=Disclosure press=toggleCode aria-expanded=codeOpen testId="code"
+                row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
+                  Icon(name="code", size=14)
+                text (codeOpen ? "Hide the code" : "Show the code") flex=1 text-align="left"
+                text lv.codeLang class=Mono font-size=12 color="#9aa4ae"
+                row class=Secondary
+                  Icon(name=(codeOpen ? "up" : "down"), size=16)
+              if codeOpen
+                column border-radius=8 background-color="#0f1318" box-shadow="inset 0 0 0 1px #1f242c" overflow="hidden"
+                  row height=32 align-items="center" padding="0 12px" border-bottom="1px solid #1f242c"
+                    text lv.codeFile class=Mono font-size=12 color="#9aa4ae"
+                  column padding="12px 14px" overflow-x="auto"
+                    for l in lv.code key=l.id
+                      text class=Mono font-size=12.5 line-height=1.6 white-space="pre" min-height=20 padding-left=`${l.indent * 2}ch`
+                        for r in l.runs key=r.id
+                          if r.kind == "c"
+                            text r.text color="#9aa4ae" font-style="italic"
+                          else if r.kind == "k"
+                            text r.text color="#ff9bd2"
+                          else if r.kind == "n"
+                            text r.text color="#ffd36b"
+                          else if r.kind == "f"
+                            text r.text color="#7cc4ff"
+                          else
+                            text r.text
+        if lv.claims.length > 0
+          column border-top="1px solid rgba(255, 255, 255, 0.10)"
+            column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(mathsOpen ? 16 : 0) gap=12
+              button class=Disclosure press=toggleMaths aria-expanded=mathsOpen testId="maths"
+                row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
+                  Icon(name="sigma", size=14)
+                text (mathsOpen ? "Hide the maths" : "Show the maths") flex=1 text-align="left"
+                text `${lv.claims.length} ${lv.claims.length == 1 ? "fact" : "facts"}` class=Mono font-size=12 color="#9aa4ae"
+                row class=Secondary
+                  Icon(name=(mathsOpen ? "up" : "down"), size=16)
+              if mathsOpen
+                column gap=14
+                  for c in lv.claims key=c.id
+                    row gap=8
+                      text c.id.slice(1) class=Mono font-size=12 color="#9aa4ae" width=20 line-height=1.9 flex-shrink=0
+                      column gap=4 flex=1 min-width=0
+                        text font-weight=500 class=Para
+                          Runs(runs=c.stmt)
+                        text font-size=13 line-height=1.5 color="#9aa4ae"
+                          Runs(runs=c.why)
+                  text "Sources" class=Eyebrow
+                  column gap=6
+                    for s in lv.sources key=s.id
+                      if s.href != ""
+                        link href=s.href font-size=13 color="#4aa8ff" text-decoration="underline"
+                          text s.text
+                      else
+                        text s.text font-size=13
 
-// The three levels as one segmented control.
+// The three levels as one segmented control, with a thumb that slides to the
+// level picked.
 component LevelSwitch
   props
     levels: Level[]
     level: number
     pickLevel: action
     tall: bool
+    still: bool
   view
-    row gap=2 padding=2 border-radius=8 background-color="rgba(255, 255, 255, 0.06)" box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.10)" role="radiogroup" aria-label="Explain it"
+    row position="relative" gap=0 padding=2 border-radius=8 background-color="rgba(255, 255, 255, 0.06)" box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.10)" role="radiogroup" aria-label="Explain it"
+      view position="absolute" top=2 bottom=2 left=2 width=`calc((100% - 4px) / ${max(levels.length, 1)})` border-radius=6 background-color="#e6edf3" box-shadow="0 1px 2px rgba(0, 0, 0, 0.5)" translate=`${level * 100}% 0px` transition=(still ? "none" : "translate 260ms cubic-bezier(0.2, 0, 0, 1)") aria-hidden="true"
       for lv in levels key=lv.id
-        button class=Seg flex=1 height=(tall ? 40 : 30) role="radio" aria-checked=(lv.index == level) press=pickLevel(lv.index) testId=`pick-${lv.id}`
-          text lv.label
+        button class=LevelSeg height=(tall ? 40 : 30) role="radio" aria-checked=(lv.index == level) press=pickLevel(lv.index) testId=`pick-${lv.id}`
+          // The picked label's colour is its own row, so hover cannot turn it white on the thumb.
+          text lv.label color=(lv.index == level ? "#0b0f14" : "inherit") transition=(still ? "none" : "color 240ms cubic-bezier(0.2, 0, 0, 1)")
 
 // The phone: a zoom chip, a dock of icon buttons, and the explainer as a sheet
 // at three heights (0 peek, 1 half, 2 full).
@@ -521,7 +578,10 @@ component PhoneUi
     toggleCode: action
     toggleMaths: action
     steps: number
+    stepsMoved: bool
     setSteps: action
+    resetSteps: action
+    still: bool
   derive sheetHeight = sheet == 0 ? 76 : sheet == 1 ? 420 : min(772, height - 72)
   derive current = levels.at(level)
   view
@@ -550,7 +610,7 @@ component PhoneUi
         button class=Btn width=44 height=44 padding=0 popovertarget="theme-menu" aria-label="Colours" testId="colours"
           Icon(name="palette", size=20)
     ThemeMenu(themes=themes, theme=theme, setTheme=setTheme)
-    column class=Glass position="absolute" left=0 right=0 bottom=0 height=sheetHeight border-radius="16px 16px 0 0" overflow="hidden" transition="height 180ms cubic-bezier(0.4, 0, 0.2, 1)" testId="sheet"
+    column class=Glass position="absolute" left=0 right=0 bottom=0 height=sheetHeight border-radius="16px 16px 0 0" overflow="hidden" transition=(still ? "none" : "height 180ms cubic-bezier(0.4, 0, 0.2, 1)") testId="sheet"
       button appearance="none" height=20 background-color="transparent" display="flex" justify-content="center" press=setSheet(sheet == 1 ? 2 : 1) aria-label=(sheet == 1 ? "Expand the explainer" : "Open the explainer") testId="grab"
         view width=36 height=5 border-radius=3 margin-top=6 background-color="rgba(255, 255, 255, 0.22)"
       if sheet == 0
@@ -565,11 +625,11 @@ component PhoneUi
           button class=Btn width=44 height=44 padding=0 press=setSheet(0) aria-label="Collapse the explainer" testId="collapse"
             Icon(name="down", size=20)
         column padding="0 16px 8px"
-          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=true)
+          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=true, still=still)
         scroll flex=1 min-height=0 padding="8px 16px 24px"
           match current
             case some(lv)
-              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps, live=true)
+              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, stepsMoved=stepsMoved, setSteps=setSteps, resetSteps=resetSteps, live=true, still=still)
             case none
               text ""
 
@@ -585,6 +645,7 @@ component NoGpu
     toggleCode: action
     toggleMaths: action
     phone: bool
+    still: bool
   derive current = levels.at(level)
   view
     scroll position="absolute" inset=0 background-color="#0b0f14" testId="reader"
@@ -597,9 +658,9 @@ component NoGpu
               text "This browser can’t draw the live picture" role="heading" aria-level=2 font-size=15 font-weight=600
               text "The live picture needs WebGPU. Try a recent version of Chrome or Edge on a desktop computer. Everything else on this page still works: the text, the code and the maths." class=Secondary font-size=13 line-height=1.5
           text "Why is it cool?" role="heading" aria-level=1 font-size=26 font-weight=600 letter-spacing=-0.4
-          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false)
+          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false, still=still)
           match current
             case some(lv)
-              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=12, setSteps=pickLevel, live=false)
+              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=12, stepsMoved=false, setSteps=pickLevel, resetSteps=toggleCode, live=false, still=still)
             case none
               text ""

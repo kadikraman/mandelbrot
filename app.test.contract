@@ -38,3 +38,15 @@ test "the Colours menu picks a theme"
   tap "theme-magma"
   expect tree has "chosen-magma"
   expect tree missing "chosen-warm"
+
+test "the steps slider caps the picture, and Reset gives back full detail"
+  size 1440x900
+  clock data
+  tap "show"
+  tap "pick-some"
+  expect text "steps-value" == "Full detail"
+  type "steps" "40"
+  expect text "steps-value" == "40"
+  tap "steps-reset"
+  expect text "steps-value" == "Full detail"
+  expect tree missing "steps-reset"
