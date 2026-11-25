@@ -13,7 +13,7 @@ test "the explainer switches levels, opens the code and the facts, and hides"
   clock data
   expect tree missing "explainer"
   tap "show"
-  expect text "explainer-title" == "Why is it cool?"
+  expect text "explainer-title" == "Why is this cool?"
   expect tree has "level-five"
   expect tree missing "code"
   tap "pick-some"

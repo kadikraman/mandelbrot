@@ -2,9 +2,9 @@
 //! high-precision reference orbit, so it stays sharp far past f32's 10⁴×.
 //!
 //! A click zooms 4× in or out around the point under the pointer, which stays
-//! put; drag pans; the wheel zooms. The set is drawn into its own texture only
-//! when the view changes, at a lower resolution while the view moves, and a
-//! cheap pass puts that texture on screen with the hover box over it.
+//! put; a touch tap also moves it to the centre. Drag pans; the wheel zooms.
+//! The set is drawn into its own texture only when the view changes, at a
+//! lower resolution while the view moves, and a cheap pass puts that texture on screen with the hover box over it.
 //!
 //! Views are f64 offsets from a high-precision anchor (`deep::Point`), which
 //! moves to the view when the offset grows, so f64 never runs out.
@@ -300,6 +300,14 @@ impl MandelSurface {
         self.ease_to(self.target.scaled_about(px, py, factor));
     }
 
+    /// A touch tap zooms like a click, and the tapped point moves to the centre:
+    /// a phone has no box showing where a click lands.
+    fn tap(&mut self, x: f32, y: f32, zoom_out: bool) {
+        let (px, py) = self.plane_at(self.target, x, y);
+        self.click(x, y, zoom_out);
+        self.target = View { cx: px, cy: py, ..self.target };
+    }
+
     /// The whole set, centred in the canvas. It ignores the explainer, so opening
     /// or closing it never moves or rescales the picture.
     fn home_view(&self) -> View {
@@ -422,9 +430,7 @@ impl MandelSurface {
                 if !press.dragged && far > slop {
                     press.dragged = true;
                 }
-                // On a touch screen a drag only stops the press from being a tap:
-                // the page offers taps there, and no panning.
-                if press.dragged && kind != PointerKind::Touch {
+                if press.dragged {
                     self.pan(dx, dy);
                 }
             }
@@ -435,8 +441,12 @@ impl MandelSurface {
                         let tap = !press.dragged && held < TAP_MS;
                         let verdict = if tap { "tap" } else if press.dragged { "drag" } else { "too slow" };
                         self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
-                        if tap {
+                        if tap && kind == PointerKind::Touch {
+                            self.tap(press.x, press.y, press.zoom_out);
+                        } else if tap {
                             self.click(press.x, press.y, press.zoom_out);
+                        }
+                        if tap {
                             if kind == PointerKind::Touch {
                                 self.taps += 1;
                                 self.last_tap = (press.x, press.y);
@@ -1381,13 +1391,16 @@ mod tests {
     }
 
     #[test]
-    fn a_forwarded_touch_taps_and_a_drag_does_nothing() {
+    fn a_forwarded_touch_taps_to_the_centre_and_a_drag_pans() {
         let mut s = surface();
         let step = s.target.step;
         let message = |text: &str, at_ms: f64| InputEvent::Message { text: text.into(), at_ms };
         s.input(&message("touch down 400 300", 0.0));
         s.input(&message("touch up 400 300", 80.0));
         assert!(s.target.step < step);
+        // The tapped point is the new centre.
+        let (px, py) = s.plane_at(s.view, 400.0, 300.0);
+        assert_eq!((s.target.cx, s.target.cy), (px, py));
         let zoomed = s.target;
         s.view = zoomed;
         s.ease = None;
@@ -1395,8 +1408,9 @@ mod tests {
         s.input(&message("touch move 430 300", 220.0));
         s.input(&message("touch move 460 300", 240.0));
         s.input(&message("touch up 460 300", 260.0));
-        // A touch drag neither zooms nor pans.
-        assert_eq!(s.target, zoomed);
+        // A touch drag pans with the finger and does not zoom.
+        assert_eq!(s.target.step, zoomed.step);
+        assert!((s.target.cx - (zoomed.cx - 60.0 * zoomed.step)).abs() < zoomed.step * 1e-6);
     }
 
     #[test]

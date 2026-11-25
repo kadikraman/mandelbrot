@@ -10,10 +10,10 @@ ordinary floating point gives up, and a short explainer beside it. Built with
 
 - **Click to zoom.** A click zooms 4× around the point under the pointer. Option-click or
   right-click zooms the other way. Drag pans and the wheel zooms. On a phone, a tap zooms
-  in or out, and there is no panning.
+  in or out and moves the tapped point to the centre, and a drag pans.
 - **Deep zoom.** The picture stays sharp to about 10³⁴×. There the GPU's 32-bit numbers run out, so
   the zoom stops and the page says so.
-- **An explainer beside the picture: "Why is it cool?"** It comes at three levels: "Like I'm 5",
+- **An explainer beside the picture: "Why is this cool?"** It comes at three levels: "Like I'm 5",
   "Some maths" and "Pro". Each level says what the set is, why it is remarkable and how this page
   draws it. "Some maths" adds a slider that redraws the picture with fewer steps, and the
   escape-time code; "Pro" adds the maths facts with their reasons, and sources. On a phone the
