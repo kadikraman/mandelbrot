@@ -179,6 +179,9 @@ pub struct MandelSurface {
     input_log: Vec<String>,
     /// The last point of a touch the page forwards.
     forwarded_last: Option<(f32, f32)>,
+    /// Touch taps so far, and where the last one was: the page marks each.
+    taps: u32,
+    last_tap: (f32, f32),
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -240,6 +243,8 @@ impl Default for MandelSurface {
             free_right: 0.0,
             input_log: Vec::new(),
             forwarded_last: None,
+            taps: 0,
+            last_tap: (0.0, 0.0),
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -430,6 +435,10 @@ impl MandelSurface {
                         self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
                         if tap {
                             self.click(press.x, press.y, press.zoom_out);
+                            if kind == PointerKind::Touch {
+                                self.taps += 1;
+                                self.last_tap = (press.x, press.y);
+                            }
                         }
                     }
                     Some(press) => self.note(format!("up #{id}, but the press was #{}", press.id)),
@@ -746,11 +755,14 @@ impl Surface for MandelSurface {
         sorted.sort_by(f64::total_cmp);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
-            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
+            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","taps":{},"tapX":{:.1},"tapY":{:.1},"autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
             zoom,
             zoom_label(zoom),
             self.target.deepest(),
             self.input_log.join("\\n"),
+            self.taps,
+            self.last_tap.0,
+            self.last_tap.1,
             self.auto_running(),
             self.clicks,
             at(0.5),
