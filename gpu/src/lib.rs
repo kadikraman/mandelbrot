@@ -181,7 +181,8 @@ pub struct MandelSurface {
     forwarded_last: Option<(f32, f32)>,
     /// Touch taps so far, and where the last one was: the page marks each.
     taps: u32,
-    last_tap: (f32, f32),
+    /// The last tap's plane point, so its mark moves with the picture.
+    tap_point: (f64, f64),
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -244,7 +245,7 @@ impl Default for MandelSurface {
             input_log: Vec::new(),
             forwarded_last: None,
             taps: 0,
-            last_tap: (0.0, 0.0),
+            tap_point: (0.0, 0.0),
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -281,6 +282,11 @@ impl MandelSurface {
         let dx = x as f64 - self.size.0 as f64 * 0.5;
         let dy = self.size.1 as f64 * 0.5 - y as f64;
         (view.cx + dx * view.step, view.cy + dy * view.step)
+    }
+
+    /// Where plane point `p` is in the canvas, in points: `plane_at` backwards.
+    fn screen_at(&self, view: View, (px, py): (f64, f64)) -> (f64, f64) {
+        ((px - view.cx) / view.step + self.size.0 as f64 * 0.5, self.size.1 as f64 * 0.5 - (py - view.cy) / view.step)
     }
 
     fn ease_to(&mut self, target: View) {
@@ -449,7 +455,7 @@ impl MandelSurface {
                         if tap {
                             if kind == PointerKind::Touch {
                                 self.taps += 1;
-                                self.last_tap = (press.x, press.y);
+                                self.tap_point = self.plane_at(self.view, press.x, press.y);
                             }
                         }
                     }
@@ -615,6 +621,7 @@ impl MandelSurface {
             r.offset = (r.offset.0 - dx, r.offset.1 - dy);
         }
         self.auto_target = (self.auto_target.0 - dx, self.auto_target.1 - dy);
+        self.tap_point = (self.tap_point.0 - dx, self.tap_point.1 - dy);
     }
 
     /// Whether `r` can draw the view: enough bits, and near enough for dc's f32.
@@ -765,6 +772,7 @@ impl Surface for MandelSurface {
         let zoom = self.home_step / self.target.step;
         let mut sorted = self.intervals.clone();
         sorted.sort_by(f64::total_cmp);
+        let (tap_x, tap_y) = self.screen_at(self.view, self.tap_point);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
             r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"inputLog":"{}","taps":{},"tapX":{:.1},"tapY":{:.1},"autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
@@ -773,8 +781,8 @@ impl Surface for MandelSurface {
             self.target.deepest(),
             self.input_log.join("\\n"),
             self.taps,
-            self.last_tap.0,
-            self.last_tap.1,
+            tap_x,
+            tap_y,
             self.auto_running(),
             self.clicks,
             at(0.5),
@@ -1398,12 +1406,14 @@ mod tests {
         let mut s = surface();
         let step = s.target.step;
         let message = |text: &str, at_ms: f64| InputEvent::Message { text: text.into(), at_ms };
-        s.input(&message("touch down 400 300", 0.0));
-        s.input(&message("touch up 400 300", 80.0));
+        s.input(&message("touch down 200 150", 0.0));
+        s.input(&message("touch up 200 150", 80.0));
         assert!(s.target.step < step);
-        // The tapped point is the new centre.
-        let (px, py) = s.plane_at(s.view, 400.0, 300.0);
+        // The tapped point is the new centre, and its mark goes there with it.
+        let (px, py) = s.plane_at(s.view, 200.0, 150.0);
         assert_eq!((s.target.cx, s.target.cy), (px, py));
+        assert_eq!(s.screen_at(s.view, s.tap_point), (200.0, 150.0));
+        assert_eq!(s.screen_at(s.target, s.tap_point), (400.0, 300.0));
         let zoomed = s.target;
         s.view = zoomed;
         s.ease = None;
