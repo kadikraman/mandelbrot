@@ -1,0 +1,23 @@
+[package]
+name = "mandelbrot-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+workspace = "../.exact/gpu"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+exact-gpu.workspace = true
+astro-float = { version = "0.9.6", default-features = false, features = ["std"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys.workspace = true
+
+[build-dependencies]
+exact-gpu-reflect.workspace = true

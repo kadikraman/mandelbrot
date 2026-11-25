@@ -1,0 +1,20 @@
+{
+  "$schema": ".exact/checkout/scripts/app.schema.json",
+  "name": "Mandelbrot",
+  "short_name": "Mandelbrot",
+  "id": "dev.kadi.mandelbrot",
+  "start_url": "/",
+  "display": "standalone",
+  "app": {
+    "id": "dev.kadi.mandelbrot",
+    "name": "Mandelbrot"
+  },
+  "host": {
+    "web": {}
+  },
+  "deploy": {
+    "store": {
+      "web": "0"
+    }
+  }
+}

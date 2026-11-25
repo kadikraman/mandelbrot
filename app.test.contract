@@ -1,0 +1,9 @@
+test "a click zooms in, and in zoom-out mode the same click zooms back out"
+  expect tree has "set"
+  tap "set"
+  clock +1000
+  expect text "zoom" == "Zoom 4×"
+  tap "mode-out"
+  tap "set"
+  clock +1000
+  expect text "zoom" == "Zoom 1×"

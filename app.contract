@@ -1,0 +1,64 @@
+// A full-screen Mandelbrot canvas. A click zooms in or out, as the toggle
+// says; Option-click and right-click zoom out.
+shape View
+  zoom: number
+  clicks: number
+  frameP50: number
+  frameP95: number
+  frames: number
+  scale: number
+  iterations: number
+  bits: number
+  orbit: number
+  sharp: number
+  bla: number
+  presented: bool
+
+component Mandelbrot
+  resource view = exactSurface("mandel") as shape View
+  state zoomOut = false
+  state showBox = false
+  state auto = false
+  state iterScale = 1
+  state blaOn = true
+  action toggleBla
+    blaOn = not blaOn
+  action setIterScale(k: number)
+    iterScale = k
+  action pick(out: bool)
+    zoomOut = out
+  action toggleBox
+    showBox = not showBox
+  action toggleAuto
+    auto = not auto
+  action reset
+    postMessage("reset", "mandel")
+  action deep
+    postMessage("goto -1.7499357218920984460646651243594 0.0000000890808697365708495087578 1e6", "mandel")
+  action hovered(on: bool)
+    if not on
+      postMessage("hover-off", "mandel")
+  view
+    main testId="root" width="100%" height="100%" position="relative"
+      canvas surface=mandel(maxIter=0, autoZoom=(auto ? 3 : 0), zoomOut=zoomOut, iterScale=iterScale, bla=blaOn, hoverBox=showBox) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      column position="absolute" top=12 left=12 gap=8 padding=12 border-radius=12 background-color="rgba(20,20,24,0.8)" color-scheme="dark" color="-exact-label"
+        row role="radiogroup" aria-label="Click to"
+          button role="radio" aria-checked=(not zoomOut) press=pick(false) testId="mode-in" flex=1
+            text "Zoom in"
+          button role="radio" aria-checked=zoomOut press=pick(true) testId="mode-out" flex=1
+            text "Zoom out"
+        text "Option-click or right-click zooms the other way." font="-exact-footnote"
+        text `Zoom ${view.zoom}×` testId="zoom"
+        text `${view.iterations} iterations, moving at ${view.scale} resolution` testId="detail"
+        text `Frame ${view.frameP50} ms p50, ${view.frameP95} ms p95` testId="frames"
+        text `${view.bits}-bit reference, ${view.orbit} points, BLA ${view.bla} levels` testId="reference"
+        text `Sharp ${view.sharp} of 16` testId="sharp"
+        row gap=8
+          button "Reset" press=reset testId="reset"
+          button "Deep point" press=deep testId="deep"
+          button (showBox ? "Hide zoom box" : "Show zoom box") press=toggleBox testId="box"
+        row gap=8
+          button "1× iterations" press=setIterScale(1) testId="iters-1"
+          button "4× iterations" press=setIterScale(4) testId="iters-4"
+          button (blaOn ? "BLA off" : "BLA on") press=toggleBla testId="bla"
+          button (auto ? "Stop" : "Auto zoom") press=toggleAuto testId="auto"
