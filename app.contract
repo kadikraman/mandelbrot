@@ -5,7 +5,6 @@
 shape View
   zoom: number
   zoomLabel: string
-  autoRunning: bool
   sharp: number
   presented: bool
 
@@ -194,7 +193,6 @@ component Mandelbrot
   resource chapters = chapters() as shape Chapter[] else empty()
   state zoomOut = false
   state showBox = false
-  state autoRun = 0
   state chapter = 0
   state explainerOpen = false
   state contentsOpen = false
@@ -216,13 +214,7 @@ component Mandelbrot
     zoomOut = out
   action toggleBox
     showBox = not showBox
-  action toggleAuto
-    if view.autoRunning
-      autoRun = 0 - autoRun
-    else
-      autoRun = (autoRun < 0 ? 0 - autoRun : autoRun) + 1
   action reset
-    autoRun = (autoRun > 0 ? 0 - autoRun : autoRun)
     postMessage("reset", "mandel")
   action hovered(on: bool)
     if not on
@@ -260,11 +252,11 @@ component Mandelbrot
       postMessage("pan 0 -80", "mandel")
   view
     main testId="root" width="100%" height="100%" position="relative" overflow="hidden" background-color="#000000" color="#e6edf3" color-scheme="dark" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" key=key
-      canvas surface=mandel(maxIter=(capped ? steps : 0), autoZoom=(autoRun > 0 ? 3 : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, autoRun=autoRun, freeRight=((not phone and explainerOpen) ? 432 : 0)) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0)) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
       if noGpu
         NoGpu(chapters=chapters, chapter=chapter, go=go, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone)
       else if phone
-        PhoneUi(view=view, height=viewport.height, chapters=chapters, chapter=chapter, go=go, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, toggleAuto=toggleAuto, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
+        PhoneUi(view=view, height=viewport.height, chapters=chapters, chapter=chapter, go=go, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
       else
         column class=Glass position="absolute" left=16 bottom=16 testId="explore"
           row align-items="center" gap=4 padding=6
@@ -277,7 +269,7 @@ component Mandelbrot
                 text "Zoom out"
             view class=Divider
             row align-items="center" gap=8 height=32 padding="0 8px" min-width=168
-              if view.sharp < 16 and not view.autoRunning
+              if view.sharp < 16
                 Ring(passes=view.sharp)
               else
                 view width=16 height=16 flex-shrink=0
@@ -290,16 +282,8 @@ component Mandelbrot
             button class=Btn aria-pressed=(showBox ? "true" : "false") press=toggleBox testId="box"
               Icon(name="box", size=16)
               text "Zoom box"
-            button class=Btn aria-pressed=(view.autoRunning ? "true" : "false") press=toggleAuto testId="auto"
-              if view.autoRunning
-                view width=6 height=6 border-radius=3 background-color="rgb(255, 138, 76)" box-shadow="0 0 0 3px rgba(255, 138, 76, 0.25)"
-                Icon(name="stop", size=16)
-                text "Stop"
-              else
-                Icon(name="play", size=16)
-                text "Auto zoom"
-          text (view.autoRunning ? "Auto zoom dives towards a tiny copy of the set, then starts again. Click the picture to stop." : `Click zooms ${zoomOut ? "out" : "in"} 4×. Option-click or right-click zooms the other way.`) class=Secondary font-size=12 line-height=1.3 padding="0 12px 8px"
-          text (view.sharp < 16 and not view.autoRunning ? `Sharpening: pass ${view.sharp + 1} of 16` : "") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
+          text `Click zooms ${zoomOut ? "out" : "in"} 4×. Option-click or right-click zooms the other way.` class=Secondary font-size=12 line-height=1.3 padding="0 12px 8px"
+          text (view.sharp < 16 ? `Sharpening: pass ${view.sharp + 1} of 16` : "") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
         if explainerOpen
           column class=Glass position="absolute" top=16 right=16 bottom=16 width=400 overflow="hidden" testId="explainer"
             column gap=10 padding="12px 12px 0 16px"
@@ -366,10 +350,6 @@ component Icon
         path d="M17 3h2a2 2 0 0 1 2 2v2"
         path d="M21 17v2a2 2 0 0 1-2 2h-2"
         path d="M7 21H5a2 2 0 0 1-2-2v-2"
-      if name == "play"
-        path d="M6 3l14 9-14 9z" fill="currentColor"
-      if name == "stop"
-        rect x=6 y=6 width=12 height=12 rx=2 fill="currentColor"
       if name == "list"
         path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
       if name == "panel"
@@ -535,7 +515,6 @@ component PhoneUi
     pick: action
     showBox: bool
     toggleBox: action
-    toggleAuto: action
     reset: action
     sheet: number
     setSheet: action
@@ -550,11 +529,11 @@ component PhoneUi
   view
     column class=Glass position="absolute" top=12 left=12 gap=4 padding="8px 12px 9px" testId="chip"
       row align-items="center" gap=8
-        if view.sharp < 16 and not view.autoRunning
+        if view.sharp < 16
           Ring(passes=view.sharp)
         text "Zoom" class=Secondary font-size=13
         text `${view.zoomLabel}×` class=Mono font-size=13 font-weight=500 font-variant-numeric="tabular-nums" testId="zoom"
-      text (view.autoRunning ? "Diving to a tiny copy. Tap to stop." : `Tap zooms ${zoomOut ? "out" : "in"} 4×`) class=Secondary font-size=12
+      text `Tap zooms ${zoomOut ? "out" : "in"} 4×` class=Secondary font-size=12
     if sheet < 2
       row class=Glass position="absolute" left="50%" translate="-50% 0" bottom=(sheetHeight + 12) align-items="center" gap=4 padding=4 border-radius=14 testId="dock"
         row gap=2 padding=2 border-radius=10 background-color="rgba(255, 255, 255, 0.06)" role="radiogroup" aria-label="Tap to"
@@ -567,14 +546,6 @@ component PhoneUi
           Icon(name="reset", size=20)
         button class=Btn width=44 height=44 padding=0 aria-pressed=(showBox ? "true" : "false") press=toggleBox aria-label="Zoom box" testId="box"
           Icon(name="box", size=20)
-        button class=Btn height=44 aria-pressed=(view.autoRunning ? "true" : "false") press=toggleAuto testId="auto"
-          if view.autoRunning
-            view width=6 height=6 border-radius=3 background-color="rgb(255, 138, 76)"
-            Icon(name="stop", size=20)
-            text "Stop"
-          else
-            Icon(name="play", size=20)
-            text "Auto"
     column class=Glass position="absolute" left=0 right=0 bottom=0 height=sheetHeight border-radius="16px 16px 0 0" overflow="hidden" transition="height 180ms cubic-bezier(0.4, 0, 0.2, 1)" testId="sheet"
       button appearance="none" height=20 background-color="transparent" display="flex" justify-content="center" press=setSheet(sheet == 1 ? 2 : 1) aria-label=(sheet == 1 ? "Expand the explainer" : "Open the explainer") testId="grab"
         view width=36 height=5 border-radius=3 margin-top=6 background-color="rgba(255, 255, 255, 0.22)"
