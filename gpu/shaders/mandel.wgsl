@@ -43,8 +43,29 @@ fn palette(t: f32) -> vec3<f32> {
     return 0.5 + 0.5 * cos(6.2831853 * (t + d));
 }
 
+// |dz/dz₁|² below which a pixel is taken to be inside the set and stops. The
+// Rust test `the_interior_exit_never_stops_an_escaping_pixel` checks it.
+const INTERIOR: f32 = 1.0e-6;
+
 fn mul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
     return vec2<f32>(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+// Where level k's entry starting at reference iteration m is, if it exists and
+// its skip fits this |dz|, the limit and the orbit; else 0.
+fn bla_fit(k: u32, m: u32, n: u32, limit: u32, len: u32, dz_length: f32) -> u32 {
+    let header = bla[k];
+    let j = (m - 1u) >> k;
+    if j >= u32(header.y) {
+        return 0u;
+    }
+    let at = 32u + 2u * (u32(header.x) + j);
+    let rl = bla[at + 1u];
+    let l = u32(rl.y);
+    if dz_length < rl.x && n + l <= limit && m + l < len {
+        return at;
+    }
+    return 0u;
 }
 
 @fragment
@@ -57,10 +78,12 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     var dz = vec2<f32>(0.0, 0.0);
     // dz/dc times the step: the derivative in pixels, which stays in f32's range at depth.
     var der = vec2<f32>(0.0, 0.0);
-    // dz/dz₀, only while counting: it shrinks towards zero inside the set and
-    // grows outside, so a pixel left at the limit can be told apart.
+    // dz/dz₁, the orbit's derivative from its first point (z₀ = 0 would make it
+    // 0): it shrinks towards zero inside the set and grows outside, so a pixel
+    // can stop early inside, and a pixel left at the limit can be told apart.
     let counting = u.count_stats > 0.5;
     var dzz = vec2<f32>(1.0, 0.0);
+    var interior = false;
     var z = vec2<f32>(0.0, 0.0);
     var m = 0u;
     var n = 0u;
@@ -71,39 +94,35 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
         if n >= limit {
             break;
         }
-        // The longest skip that starts here and is valid for this |dz|.
+        // The longest skip that starts here and is valid for this |dz|. A level's
+        // radius is never above the level below it at the same start, so when
+        // level 0 does not fit nothing does, and otherwise a binary search finds
+        // the highest that fits.
         var skipped = false;
-        if m > 0u && m + 1u < bla_len {
+        if m > 0u && m + 1u < bla_len && levels > 0u {
             let dz_length = length(dz);
-            var k = levels;
-            loop {
-                if k == 0u {
-                    break;
-                }
-                k = k - 1u;
-                if ((m - 1u) & ((1u << k) - 1u)) != 0u {
-                    continue;
-                }
-                let header = bla[k];
-                let j = (m - 1u) >> k;
-                if j >= u32(header.y) {
-                    continue;
-                }
-                let at = 32u + 2u * (u32(header.x) + j);
-                let ab = bla[at];
-                let rl = bla[at + 1u];
-                let l = u32(rl.y);
-                if dz_length < rl.x && n + l <= limit && m + l < len {
-                    der = mul(ab.xy, der) + ab.zw * u.step;
-                    if counting {
-                        dzz = mul(ab.xy, dzz);
+            var at = bla_fit(0u, m, n, limit, len, dz_length);
+            if at != 0u {
+                var lo = 0u;
+                var hi = min(countTrailingZeros(m - 1u), levels - 1u);
+                while lo < hi {
+                    let mid = (lo + hi + 1u) / 2u;
+                    let found = bla_fit(mid, m, n, limit, len, dz_length);
+                    if found != 0u {
+                        lo = mid;
+                        at = found;
+                    } else {
+                        hi = mid - 1u;
                     }
-                    dz = mul(ab.xy, dz) + mul(ab.zw, dc);
-                    m = m + l;
-                    n = n + l;
-                    skipped = true;
-                    break;
                 }
+                let ab = bla[at];
+                let l = u32(bla[at + 1u].y);
+                der = mul(ab.xy, der) + ab.zw * u.step;
+                dzz = mul(ab.xy, dzz);
+                dz = mul(ab.xy, dz) + mul(ab.zw, dc);
+                m = m + l;
+                n = n + l;
+                skipped = true;
             }
         }
         if skipped {
@@ -117,11 +136,15 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
                 dz = z;
                 m = 0u;
             }
+            if dot(dzz, dzz) < INTERIOR {
+                interior = true;
+                break;
+            }
             continue;
         }
         let zm = orbit[m];
         der = 2.0 * mul(zm + dz, der) + vec2<f32>(u.step, 0.0);
-        if counting {
+        if n > 0u {
             dzz = 2.0 * mul(zm + dz, dzz);
         }
         dz = 2.0 * mul(zm, dz) + mul(dz, dz) + dc;
@@ -137,9 +160,13 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
             dz = z;
             m = 0u;
         }
+        if dot(dzz, dzz) < INTERIOR {
+            interior = true;
+            break;
+        }
     }
     if counting {
-        if !escaped {
+        if !escaped && !interior {
             // Overflow to infinity or NaN also fails the test: outside, not yet escaped.
             if !(dot(dzz, dzz) < 1.0) {
                 atomicAdd(&stats[1], 1u);

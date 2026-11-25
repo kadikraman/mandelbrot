@@ -894,56 +894,75 @@ mod tests {
         }
     }
 
+    /// The shader's `INTERIOR`.
+    const INTERIOR: f32 = 1.0e-6;
+
     /// The shader's loop in Rust, f32 as on the GPU.
     fn perturbed_count(orbit: &[[f32; 2]], dc: [f32; 2], max_iter: u32) -> u32 {
-        perturbed_count_bla(orbit, None, dc, max_iter).0
+        perturbed_count_bla(orbit, None, dc, max_iter, false).0
     }
 
-    /// The shader's loop with its BLA lookup; also the iterations skipped.
-    fn perturbed_count_bla(orbit: &[[f32; 2]], table: Option<&bla::Table>, dc: [f32; 2], max_iter: u32) -> (u32, u32) {
+    /// The shader's loop with its BLA lookup, and with its interior exit when
+    /// `exit` is set; also the iterations skipped, and whether it stopped inside.
+    fn perturbed_count_bla(orbit: &[[f32; 2]], table: Option<&bla::Table>, dc: [f32; 2], max_iter: u32, exit: bool) -> (u32, u32, bool) {
         let mul = |a: [f32; 2], b: [f32; 2]| [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
         let (mut dz, mut m, mut n, mut skipped_total) = ([0.0f32, 0.0], 0usize, 0u32, 0u32);
+        let mut dzz = [1.0f32, 0.0];
+        let inside = |dzz: [f32; 2]| exit && dzz[0] * dzz[0] + dzz[1] * dzz[1] < INTERIOR;
         while n < max_iter {
-            if let Some(t) = table.filter(|t| m > 0 && m + 1 < t.len) {
+            if let Some(t) = table.filter(|t| m > 0 && m + 1 < t.len && t.levels > 0) {
                 let dz_length = dz[0].hypot(dz[1]);
-                let mut skipped = false;
-                for k in (0..t.levels as usize).rev() {
-                    if (m - 1) & ((1 << k) - 1) != 0 {
-                        continue;
-                    }
+                let fit = |k: usize| {
                     let header = t.data[k];
                     let j = (m - 1) >> k;
                     if j >= header[1] as usize {
-                        continue;
+                        return None;
                     }
                     let at = bla::HEADER + 2 * (header[0] as usize + j);
-                    let (ab, rl) = (t.data[at], t.data[at + 1]);
-                    let l = rl[1] as u32;
-                    if dz_length < rl[0] && n + l <= max_iter && m + (l as usize) < orbit.len() {
-                        let a = mul([ab[0], ab[1]], dz);
-                        let b = mul([ab[2], ab[3]], dc);
-                        dz = [a[0] + b[0], a[1] + b[1]];
-                        m += l as usize;
-                        n += l;
-                        skipped_total += l;
-                        skipped = true;
-                        break;
+                    let l = t.data[at + 1][1] as u32;
+                    (dz_length < t.data[at + 1][0] && n + l <= max_iter && m + (l as usize) < orbit.len()).then_some(at)
+                };
+                let mut skipped = false;
+                if let Some(mut at) = fit(0) {
+                    let (mut lo, mut hi) = (0, ((m - 1).trailing_zeros() as usize).min(t.levels as usize - 1));
+                    while lo < hi {
+                        let mid = (lo + hi + 1) / 2;
+                        match fit(mid) {
+                            Some(found) => (lo, at) = (mid, found),
+                            None => hi = mid - 1,
+                        }
                     }
+                    let (ab, l) = (t.data[at], t.data[at + 1][1] as u32);
+                    dzz = mul([ab[0], ab[1]], dzz);
+                    let a = mul([ab[0], ab[1]], dz);
+                    let b = mul([ab[2], ab[3]], dc);
+                    dz = [a[0] + b[0], a[1] + b[1]];
+                    m += l as usize;
+                    n += l;
+                    skipped_total += l;
+                    skipped = true;
                 }
                 if skipped {
                     let z = [orbit[m][0] + dz[0], orbit[m][1] + dz[1]];
                     let r2 = z[0] * z[0] + z[1] * z[1];
                     if r2 > 65536.0 {
-                        return (n, skipped_total);
+                        return (n, skipped_total, false);
                     }
                     if r2 < dz[0] * dz[0] + dz[1] * dz[1] || m + 1 >= orbit.len() {
                         dz = z;
                         m = 0;
                     }
+                    if inside(dzz) {
+                        return (n, skipped_total, true);
+                    }
                     continue;
                 }
             }
             let zm = orbit[m];
+            if n > 0 {
+                let d = mul([2.0 * (zm[0] + dz[0]), 2.0 * (zm[1] + dz[1])], dzz);
+                dzz = d;
+            }
             let a = mul([2.0 * zm[0], 2.0 * zm[1]], dz);
             let b = mul(dz, dz);
             dz = [a[0] + b[0] + dc[0], a[1] + b[1] + dc[1]];
@@ -952,14 +971,66 @@ mod tests {
             n += 1;
             let r2 = z[0] * z[0] + z[1] * z[1];
             if r2 > 65536.0 {
-                return (n, skipped_total);
+                return (n, skipped_total, false);
             }
             if r2 < dz[0] * dz[0] + dz[1] * dz[1] || m + 1 >= orbit.len() {
                 dz = z;
                 m = 0;
             }
+            if inside(dzz) {
+                return (n, skipped_total, true);
+            }
         }
-        (n, skipped_total)
+        (n, skipped_total, false)
+    }
+
+    /// Over a grid of pixels at four depths, the interior exit stops only
+    /// pixels that never escape without it, and saves most of their work. On
+    /// a 120 × 80 grid no escaping pixel stopped at 1e-4 either; 0.1 stops some.
+    #[test]
+    fn the_interior_exit_never_stops_an_escaping_pixel() {
+        let deep = ("-1.7499357218920984460646651243594", "0.0000000890808697365708495087578");
+        // Centre, view width, limit: the whole set, Seahorse Valley at 256×,
+        // the deep point 1e-27 wide, and the minibrot at about 10²⁹×.
+        let views = [
+            (("-0.5", "0"), 3.0, 2_000u32),
+            (("-0.7453", "0.1127"), 3.0 / 256.0, 4_000),
+            (deep, 1e-27, 8_000),
+            (deep, 2.4e-29, 30_000),
+        ];
+        let (w, h) = (60, 40);
+        let (mut all_saved, mut all_work) = (0u64, 0u64);
+        for ((x, y), width, max_iter) in views {
+            let step = width / w as f64;
+            let bits = deep::bits_for(step).max(64);
+            let centre = Point::parse(x, y, bits).unwrap();
+            let mut orbit = Orbit::new(centre, bits);
+            orbit.advance(usize::MAX, max_iter as usize + 2);
+            let table = bla::build(&orbit.points, step * w.max(h) as f64);
+            let (mut inside, mut stopped, mut saved, mut work) = (0, 0, 0u64, 0u64);
+            for j in 0..h {
+                for i in 0..w {
+                    let dc = [((i as f64 - w as f64 / 2.0) * step) as f32, ((h as f64 / 2.0 - j as f64) * step) as f32];
+                    let (full, ..) = perturbed_count_bla(&orbit.points, Some(&table), dc, max_iter, false);
+                    let (n, _, stop) = perturbed_count_bla(&orbit.points, Some(&table), dc, max_iter, true);
+                    if stop {
+                        assert_eq!(full, max_iter, "a pixel at {dc:?} in the {width:e} view escapes at {full}, but the exit stopped it at {n}");
+                        stopped += 1;
+                    } else {
+                        assert_eq!(n, full, "the exit changed a count at {dc:?}");
+                    }
+                    if full == max_iter {
+                        inside += 1;
+                        saved += (max_iter - n) as u64;
+                        work += max_iter as u64;
+                    }
+                }
+            }
+            println!("{width:e}: {stopped} of {inside} pixels at the limit stopped early, saving {saved} of {work} iterations");
+            all_saved += saved;
+            all_work += work;
+        }
+        assert!(all_saved * 2 > all_work, "the exit saved under half the work at the limit");
     }
 
     #[test]
@@ -974,7 +1045,7 @@ mod tests {
         let (mut matched, mut total, mut skipped, mut iterated) = (0, 0, 0u64, 0u64);
         for (dx, dy) in [(1.1e-29, 0.0), (0.6e-29, 0.3e-29), (0.3e-29, -0.5e-29), (-1.1e-29, 0.7e-29), (-0.6e-29, 0.0), (0.0, 1.0e-29)] {
             let direct = deep::direct_count(&centre.offset(dx, dy, bits), bits, max_iter);
-            let (n, s) = perturbed_count_bla(&orbit.points, Some(&table), [dx as f32, dy as f32], max_iter);
+            let (n, s, _) = perturbed_count_bla(&orbit.points, Some(&table), [dx as f32, dy as f32], max_iter, false);
             println!("({dx:e},{dy:e}): direct {direct} bla {n}, skipped {s}");
             total += 1;
             if n == direct {
