@@ -46,6 +46,8 @@ and how to run it; read it first.
 - **The page is one route, `home "/" render=build`.** Exact writes the Contract `head` (title,
   description, share image) only into a rendered page, and refuses the same tags in `app.json`.
   `app.json`'s `app.origin` makes the share image's URL absolute.
+- **`modules/web/` is the page module.** Its `picture` hatch, on the canvas, cancels `touchmove`:
+  Safari on an iPhone otherwise cancels a drag at its first move, whatever `touch-action` says.
 - **`assets/` holds the favicons (`icons` in `app.json`) and the share image `og.png`.**
 - **Icons are Lucide's shapes**, drawn inline by the `Icon` component. Take new ones from Lucide
   too; `NOTICE` carries its licence.

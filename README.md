@@ -117,6 +117,7 @@ assets/             the favicons and the share image
 gpu/                the renderer, a Rust crate on Exact's GPU surface
   src/              the view, the reference orbit, BLA and the GPU passes
   shaders/          WGSL for the set and the composite
+modules/web/        the page module: keeps Safari from taking drags on the picture
 docs/               the pictures in this README
 hosting/            the EAS Hosting project
 ```
