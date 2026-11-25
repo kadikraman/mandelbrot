@@ -28,8 +28,8 @@ ordinary floating point gives up, and a short explainer beside it. Built with
 
 ## How it works
 
-The GPU draws in 32-bit floats, which run out of digits at about 10⁶× zoom. Three ideas take the
-zoom much deeper.
+The GPU draws in 32-bit floats, which keep about seven digits and blur at about 10⁴× zoom. Three
+ideas take the zoom much deeper.
 
 - **Perturbation.** The CPU computes one point's orbit, the *reference*, with as many bits as the
   zoom needs. Every pixel on the GPU then iterates only its small difference from that orbit, which

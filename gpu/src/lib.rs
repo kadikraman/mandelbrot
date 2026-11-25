@@ -1,5 +1,5 @@
 //! The Mandelbrot set on a GPU surface, by perturbation from a
-//! high-precision reference orbit, so it stays sharp far past f32's 10⁵×.
+//! high-precision reference orbit, so it stays sharp far past f32's 10⁴×.
 //!
 //! A click zooms 4× in or out around the point under the pointer, which stays
 //! put; drag pans; the wheel zooms. The set is drawn into its own texture only
