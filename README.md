@@ -4,6 +4,9 @@ An explorable Mandelbrot set for the web, with a deep zoom that stays sharp far 
 ordinary floating point gives up, and a short explainer beside it. Built with
 [Exact](https://github.com/expo/exact) and WebGPU.
 
+**Try it at [mandelbrot.expo.app](https://mandelbrot.expo.app).** It needs a browser with WebGPU;
+without it, the page shows the explainer alone.
+
 ![A spiral in Seahorse Valley at 25,600× zoom](docs/spiral.jpg)
 
 ## What it does
