@@ -1,10 +1,11 @@
 //! The Mandelbrot set on a GPU surface, by perturbation from a
 //! high-precision reference orbit, so it stays sharp far past f32's 10⁴×.
 //!
-//! A click or tap zooms 4× in or out and moves the point under it to the
-//! centre. Drag pans; the wheel zooms. The set is drawn into its own texture
-//! only when the view changes, at a lower resolution while the view moves, and
-//! a cheap pass puts that texture on screen with the hover box over it.
+//! A click zooms 4× in or out around the point under the pointer, which stays
+//! put; a touch tap also moves it to the centre. Drag pans; the wheel zooms.
+//! The set is drawn into its own texture only when the view changes, at a
+//! lower resolution while the view moves, and a cheap pass puts that texture
+//! on screen with the hover box over it.
 //!
 //! Views are f64 offsets from a high-precision anchor (`deep::Point`), which
 //! moves to the view when the offset grows, so f64 never runs out.
@@ -179,7 +180,7 @@ pub struct MandelSurface {
     input_log: Vec<String>,
     /// The last point of a touch the page forwards.
     forwarded_last: Option<(f32, f32)>,
-    /// Clicks and taps so far: the page marks each.
+    /// Touch taps so far: the page marks each.
     taps: u32,
     /// The last tap's plane point, so its mark moves with the picture.
     tap_point: (f64, f64),
@@ -296,8 +297,8 @@ impl MandelSurface {
         self.dirty = true;
     }
 
-    /// Keyboard zoom: 4× in, or out, keeping the point (x, y) where it is.
-    /// Chained zooms add to an ease in flight.
+    /// A click zooms 4× in, or out, keeping the point under it where it is.
+    /// Chained clicks add to an ease in flight.
     pub fn click(&mut self, x: f32, y: f32, zoom_out: bool) {
         self.stop_auto();
         let (px, py) = self.plane_at(self.target, x, y);
@@ -306,8 +307,8 @@ impl MandelSurface {
         self.ease_to(self.target.scaled_about(px, py, factor));
     }
 
-    /// A click or tap zooms 4× in, or out, and moves the point under it to the
-    /// centre, where the page marks it.
+    /// A touch tap zooms like a click, and the tapped point moves to the centre,
+    /// where the page marks it: a phone has no box showing where a click lands.
     fn tap(&mut self, x: f32, y: f32, zoom_out: bool) {
         let (px, py) = self.plane_at(self.target, x, y);
         self.click(x, y, zoom_out);
@@ -375,9 +376,8 @@ impl MandelSurface {
         self.zoom_out_mode != self.alt_held
     }
 
-    /// The hover box in canvas points. Zooming in, it is what fills the canvas
-    /// after a click here: a quarter-size box centred on the pointer. Zooming
-    /// out, it is where the current view shrinks to.
+    /// The hover box in canvas points: where the view lands after a click here.
+    /// The same box for both directions; zooming out, the current view shrinks into it.
     pub fn hover_box(&self) -> Option<[f32; 4]> {
         let (x, y) = self.hover?;
         if !self.show_box || self.press.as_ref().is_some_and(|p| p.dragged) || (self.target.deepest() && !self.zooms_out()) {
@@ -385,8 +385,7 @@ impl MandelSurface {
         }
         let k = 1.0 / CLICK_ZOOM as f32;
         let (w, h) = self.size;
-        let (mx, my) = if self.zooms_out() { (w * 0.5 + (w * 0.5 - x) * k, h * 0.5 + (h * 0.5 - y) * k) } else { (x, y) };
-        Some([mx - w * k * 0.5, my - h * k * 0.5, mx + w * k * 0.5, my + h * k * 0.5])
+        Some([x - x * k, y - y * k, x + (w - x) * k, y + (h - y) * k])
     }
 
     /// Before any gesture, the view refits the whole set to the new size.
@@ -451,8 +450,10 @@ impl MandelSurface {
                         let tap = !press.dragged && held < TAP_MS;
                         let verdict = if tap { "tap" } else if press.dragged { "drag" } else { "too slow" };
                         self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
-                        if tap {
+                        if tap && kind == PointerKind::Touch {
                             self.tap(press.x, press.y, press.zoom_out);
+                        } else if tap {
+                            self.click(press.x, press.y, press.zoom_out);
                         }
                     }
                     Some(press) => self.note(format!("up #{id}, but the press was #{}", press.id)),
@@ -1066,28 +1067,19 @@ mod tests {
     }
 
     #[test]
-    fn a_click_centres_its_point_and_zooms_in_then_out() {
+    fn a_click_keeps_its_point_and_zooms_in_then_out() {
         let mut s = surface();
         let before = s.target();
         let point = s.plane_at(before, 600.0, 150.0);
-        s.tap(600.0, 150.0, false);
+        s.click(600.0, 150.0, false);
         let zoomed = s.target();
         assert!((zoomed.step - before.step / CLICK_ZOOM).abs() < 1e-15);
-        assert_eq!((zoomed.cx, zoomed.cy), point);
-        assert_eq!(s.taps, 1);
-        s.tap(400.0, 300.0, true);
-        let back = s.target();
-        assert_eq!((back.cx, back.cy), point);
-        assert!((back.step - before.step).abs() < 1e-15);
-    }
-
-    #[test]
-    fn keyboard_zoom_keeps_its_point() {
-        let mut s = surface();
-        let point = s.plane_at(s.target(), 600.0, 150.0);
-        s.click(600.0, 150.0, false);
-        let still = s.plane_at(s.target(), 600.0, 150.0);
+        let still = s.plane_at(zoomed, 600.0, 150.0);
         assert!((still.0 - point.0).abs() < 1e-12 && (still.1 - point.1).abs() < 1e-12);
+        s.click(600.0, 150.0, true);
+        let back = s.target();
+        assert!((back.cx - before.cx).abs() < 1e-12 && (back.cy - before.cy).abs() < 1e-12);
+        assert!((back.step - before.step).abs() < 1e-15);
     }
 
     #[test]
@@ -1097,21 +1089,12 @@ mod tests {
         assert!(s.hover_box().is_none());
         s.show_box = true;
         let [x0, y0, x1, y1] = s.hover_box().unwrap();
-        assert_eq!([x0, y0, x1, y1], [500.0, 75.0, 700.0, 225.0]);
+        assert_eq!([x0, y0, x1, y1], [450.0, 112.5, 650.0, 262.5]);
         // The box's corners are the zoomed view's corners.
-        let before = s.target();
-        let corner = s.plane_at(before, x0, y0);
-        s.tap(600.0, 150.0, false);
+        let corner = s.plane_at(s.target(), x0, y0);
+        s.click(600.0, 150.0, false);
         let landed = s.plane_at(s.target(), 0.0, 0.0);
         assert!((corner.0 - landed.0).abs() < 1e-12 && (corner.1 - landed.1).abs() < 1e-12);
-        // Zooming out, the box is where the current view's corners go.
-        s.zoom_out_mode = true;
-        s.target = before;
-        let [x0, y0, ..] = s.hover_box().unwrap();
-        let corner = s.plane_at(before, 0.0, 0.0);
-        s.tap(600.0, 150.0, true);
-        let shrunk = s.plane_at(s.target(), x0, y0);
-        assert!((corner.0 - shrunk.0).abs() < 1e-12 && (corner.1 - shrunk.1).abs() < 1e-12);
     }
 
     #[test]
