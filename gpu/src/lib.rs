@@ -31,6 +31,8 @@ const EASE_MS: f64 = 400.0;
 /// further than a mouse (Android's touch slop is 8 dp).
 const TAP_SLOP: f32 = 6.0;
 const TOUCH_TAP_SLOP: f32 = 12.0;
+/// The id of a touch the page forwards; Exact's own pointer ids never reach it.
+const FORWARDED_ID: u32 = u32::MAX;
 const TAP_MS: f64 = 500.0;
 /// A wheel or drag counts as motion this long after its last event.
 const SETTLE_MS: f64 = 150.0;
@@ -175,6 +177,8 @@ pub struct MandelSurface {
     /// Canvas points on the right that the explainer covers.
     free_right: f32,
     input_log: Vec<String>,
+    /// The last point of a touch the page forwards.
+    forwarded_last: Option<(f32, f32)>,
     last_ms: Option<f64>,
     last_motion_ms: f64,
     /// Resolution of the set while the view moves, as a fraction of device pixels.
@@ -235,6 +239,7 @@ impl Default for MandelSurface {
             auto_stopped: false,
             free_right: 0.0,
             input_log: Vec::new(),
+            forwarded_last: None,
             last_ms: None,
             last_motion_ms: f64::NEG_INFINITY,
             moving_scale: 0.5,
@@ -369,6 +374,78 @@ impl MandelSurface {
 
     /// A panel opens or closes: the whole set refits; any other view moves by
     /// half the panel's width, so what was centred in the free area stays centred.
+    /// A touch the page forwards as `touch <phase> <x> <y>`, in canvas points.
+    /// Exact's web input drops a pointer whose id is negative, which iPhones
+    /// give touches, so the page sends those itself.
+    fn forwarded_touch(&mut self, args: &str, at_ms: f64) {
+        let mut parts = args.split_whitespace();
+        let phase = match parts.next() {
+            Some("down") => PointerPhase::Down,
+            Some("move") => PointerPhase::Move,
+            Some("up") => PointerPhase::Up,
+            Some("cancel") => PointerPhase::Cancel,
+            _ => return,
+        };
+        let (Some(Ok(x)), Some(Ok(y))) = (parts.next().map(str::parse::<f32>), parts.next().map(str::parse::<f32>)) else { return };
+        let (dx, dy) = match (phase, self.forwarded_last) {
+            (PointerPhase::Move, Some((lx, ly))) => (x - lx, y - ly),
+            _ => (0.0, 0.0),
+        };
+        self.forwarded_last = if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) { None } else { Some((x, y)) };
+        self.pointer(FORWARDED_ID, phase, x, y, dx, dy, PointerKind::Touch, 1, at_ms);
+    }
+
+    /// One pointer event, from Exact's input or forwarded by the page.
+    #[allow(clippy::too_many_arguments)]
+    fn pointer(&mut self, id: u32, phase: PointerPhase, x: f32, y: f32, dx: f32, dy: f32, kind: PointerKind, buttons: u32, at_ms: f64) {
+        if kind != PointerKind::Touch {
+            self.hover = Some((x, y));
+        }
+        match phase {
+            PointerPhase::Down => {
+                // The secondary button zooms out, whatever the mode.
+                let zoom_out = self.zooms_out() || buttons & 2 != 0;
+                self.press = Some(Press { id, x, y, at_ms, dragged: false, zoom_out, moves: 0, farthest: 0.0 });
+                self.note(format!("down {kind:?} #{id} b{buttons}"));
+            }
+            PointerPhase::Move => {
+                let Some(press) = self.press.as_mut().filter(|p| p.id == id) else { return };
+                let slop = if kind == PointerKind::Touch { TOUCH_TAP_SLOP } else { TAP_SLOP };
+                let far = ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt();
+                press.moves += 1;
+                press.farthest = press.farthest.max(far);
+                if !press.dragged && far > slop {
+                    press.dragged = true;
+                }
+                if press.dragged {
+                    self.pan(dx, dy);
+                }
+            }
+            PointerPhase::Up => {
+                match self.press.take() {
+                    Some(press) if press.id == id => {
+                        let held = at_ms - press.at_ms;
+                        let tap = !press.dragged && held < TAP_MS;
+                        let verdict = if tap { "tap" } else if press.dragged { "drag" } else { "too slow" };
+                        self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
+                        if tap {
+                            self.click(press.x, press.y, press.zoom_out);
+                        }
+                    }
+                    Some(press) => self.note(format!("up #{id}, but the press was #{}", press.id)),
+                    None => self.note(format!("up #{id} with no press")),
+                }
+                if kind == PointerKind::Touch {
+                    self.hover = None;
+                }
+            }
+            PointerPhase::Cancel => {
+                self.press = None;
+                self.note(format!("cancel #{id}"));
+            }
+        }
+    }
+
     /// The last few pointer events and what they did, for the page's `?debug=1` log.
     fn note(&mut self, entry: String) {
         if self.input_log.len() == 6 {
@@ -622,52 +699,7 @@ impl Surface for MandelSurface {
         match event {
             InputEvent::Pointer { id, phase, x, y, dx, dy, kind, buttons, alt_key, at_ms, .. } => {
                 self.alt_held = *alt_key;
-                if *kind != PointerKind::Touch {
-                    self.hover = Some((*x, *y));
-                }
-                match phase {
-                    PointerPhase::Down => {
-                        // The secondary button zooms out, whatever the mode.
-                        let zoom_out = self.zooms_out() || buttons & 2 != 0;
-                        self.press = Some(Press { id: *id, x: *x, y: *y, at_ms: *at_ms, dragged: false, zoom_out, moves: 0, farthest: 0.0 });
-                        self.note(format!("down {kind:?} #{id} b{buttons}"));
-                    }
-                    PointerPhase::Move => {
-                        let Some(press) = self.press.as_mut().filter(|p| p.id == *id) else { return };
-                        let slop = if *kind == PointerKind::Touch { TOUCH_TAP_SLOP } else { TAP_SLOP };
-                        let far = ((x - press.x).powi(2) + (y - press.y).powi(2)).sqrt();
-                        press.moves += 1;
-                        press.farthest = press.farthest.max(far);
-                        if !press.dragged && far > slop {
-                            press.dragged = true;
-                        }
-                        if press.dragged {
-                            self.pan(*dx, *dy);
-                        }
-                    }
-                    PointerPhase::Up => {
-                        match self.press.take() {
-                            Some(press) if press.id == *id => {
-                                let held = at_ms - press.at_ms;
-                                let tap = !press.dragged && held < TAP_MS;
-                                let verdict = if tap { "tap" } else if press.dragged { "drag" } else { "too slow" };
-                                self.note(format!("up #{id} {held:.0}ms {}mv {:.0}pt: {verdict}", press.moves, press.farthest));
-                                if tap {
-                                    self.click(press.x, press.y, press.zoom_out);
-                                }
-                            }
-                            Some(press) => self.note(format!("up #{id}, but the press was #{}", press.id)),
-                            None => self.note(format!("up #{id} with no press")),
-                        }
-                        if *kind == PointerKind::Touch {
-                            self.hover = None;
-                        }
-                    }
-                    PointerPhase::Cancel => {
-                        self.press = None;
-                        self.note(format!("cancel #{id}"));
-                    }
-                }
+                self.pointer(*id, *phase, *x, *y, *dx, *dy, *kind, *buttons, *at_ms);
             }
             InputEvent::Wheel { dy, x, y, alt_key, .. } => {
                 self.alt_held = *alt_key;
@@ -681,7 +713,7 @@ impl Surface for MandelSurface {
                     self.note("blur ended a press".into());
                 }
             }
-            InputEvent::Message { text, .. } => match text.as_str() {
+            InputEvent::Message { text, at_ms } => match text.as_str() {
                 "hover-off" => self.hover = None,
                 "reset" => self.reset(),
                 "zoom-in" | "zoom-out" => {
@@ -689,7 +721,9 @@ impl Surface for MandelSurface {
                     self.click((w - self.free_right) * 0.5, h * 0.5, text == "zoom-out");
                 }
                 _ => {
-                    if let Some(args) = text.strip_prefix("goto ") {
+                    if let Some(args) = text.strip_prefix("touch ") {
+                        self.forwarded_touch(args, *at_ms);
+                    } else if let Some(args) = text.strip_prefix("goto ") {
                         self.goto(args);
                     } else if let Some(args) = text.strip_prefix("pan ") {
                         let mut parts = args.split_whitespace().map(str::parse::<f32>);
@@ -1330,6 +1364,25 @@ mod tests {
             s.input(&pointer(PointerPhase::Up, 406.0, 306.0, kind, 80.0));
             assert_eq!(s.target.step < step, taps, "{kind:?}");
         }
+    }
+
+    #[test]
+    fn a_forwarded_touch_taps_and_drags() {
+        let mut s = surface();
+        let step = s.target.step;
+        let message = |text: &str, at_ms: f64| InputEvent::Message { text: text.into(), at_ms };
+        s.input(&message("touch down 400 300", 0.0));
+        s.input(&message("touch up 400 300", 80.0));
+        assert!(s.target.step < step);
+        let zoomed = s.target;
+        s.view = zoomed;
+        s.ease = None;
+        s.input(&message("touch down 400 300", 200.0));
+        s.input(&message("touch move 430 300", 220.0));
+        s.input(&message("touch move 460 300", 240.0));
+        s.input(&message("touch up 460 300", 260.0));
+        assert_eq!(s.target.step, zoomed.step);
+        assert!((s.target.cx - (zoomed.cx - 60.0 * zoomed.step)).abs() < 1e-12);
     }
 
     #[test]
