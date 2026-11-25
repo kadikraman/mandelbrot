@@ -1,4 +1,4 @@
-// The explainer's chapters. Prose marks maths with $…$, bold with **…** and
+// The explainer, at three levels. Prose marks maths with $…$, bold with **…** and
 // code with `…`; `runs` turns it into the runs the page draws.
 
 export type Run = { id: string; text: string; kind: string };
@@ -7,12 +7,13 @@ export type CodeLine = { id: string; indent: number; runs: Run[] };
 export type Claim = { id: string; stmt: Run[]; why: Run[] };
 export type Source = { id: string; text: string; href: string };
 export type Theme = { id: string; index: number; name: string; swatch: string };
-export type Chapter = {
+export type Section = { id: string; title: string; paras: Para[] };
+export type Level = {
   id: string;
-  number: number;
-  title: string;
+  index: number;
+  label: string;
   formula: string;
-  paras: Para[];
+  sections: Section[];
   control: string;
   codeFile: string;
   codeLang: string;
@@ -74,34 +75,51 @@ function sources(list: [string, string][]): Source[] {
   return list.map(([text, href], i) => ({ id: `s${i}`, text, href }));
 }
 
-const WIKIPEDIA: [string, string] = ['Mandelbrot set, Wikipedia ↗', 'https://en.wikipedia.org/wiki/Mandelbrot_set'];
-
-function chapter(number: number, title: string, rest: Partial<Chapter> = {}): Chapter {
-  return {
-    id: `ch${number}`,
-    number,
+function sections(list: [string, string[]][]): Section[] {
+  return list.map(([title, paras], i) => ({
+    id: `s${i}`,
     title,
-    formula: '',
-    paras: [{ id: 'p0', runs: runs('This chapter is still being written.') }],
-    control: 'none',
-    codeFile: '',
-    codeLang: '',
-    code: [],
-    claims: [],
-    sources: [],
-    ...rest,
-  };
+    paras: paras.map((p, j) => ({ id: `p${j}`, runs: runs(p, `s${i}p${j}r`) })),
+  }));
 }
 
-export const CHAPTERS: Chapter[] = [
-  chapter(1, 'One number and one rule', {
+function level(index: number, id: string, label: string, rest: Partial<Level>): Level {
+  return { id, index, label, formula: '', sections: [], control: 'none', codeFile: '', codeLang: '', code: [], claims: [], sources: [], ...rest };
+}
+
+export const LEVELS: Level[] = [
+  level(0, 'five', 'Like I’m 5', {
+    sections: sections([
+      ['What it is', [
+        'Every spot on this picture has its own number. Take a spot’s number and do one small sum with it, again and again, each time using the last answer.',
+        'For some spots the answer stays small forever. For others it runs away and gets huge. The black shape is every spot whose answer stays small. The colours show how fast the others run away.',
+      ]],
+      ['Why it’s cool', [
+        'The rule is tiny: one sum, done again and again. But the edge of the black shape never gets simpler. Zoom in anywhere on the edge and you find spirals, seahorses and lightning.',
+        'You even find **tiny copies of the whole shape**, hiding in the edge. Each copy has its own edge, full of its own copies. Nobody drew any of it. It all comes out of that one small sum.',
+      ]],
+      ['How this page draws it', [
+        'Your computer’s graphics chip plays the game for every dot on the screen at once, millions of dots, many times a second.',
+        'When you zoom very deep, the numbers get too small for the chip. So the page works out one spot very carefully, and every other dot keeps track of how far it is from that spot. Small numbers like that fit.',
+      ]],
+    ]),
+  }),
+  level(1, 'some', 'Some maths', {
     formula: 'z → z² + c',
-    paras: [
-      'Pick a number and call it $c$. Start with $z = 0$. Now apply one rule, again and again: square $z$, then add $c$.',
-      'For most values of $c$, $z$ soon grows without limit. We say it **escapes**. For some values, $z$ stays small forever, however long you keep going.',
-      'The Mandelbrot set is every $c$ that stays. That is the whole definition. Each pixel on this page is one $c$: black pixels stay, coloured pixels escape.',
-      'One small catch: $c$ is a point on a flat plane, not a number on a line. Complex numbers are a tidy way to do arithmetic with points, so “across” and “up” is all you need.',
-    ].map((p, i) => ({ id: `p${i}`, runs: runs(p, `p${i}r`) })),
+    sections: sections([
+      ['What it is', [
+        'Pick a complex number $c$: a point on the plane, with an across part and an up part. Start with $z = 0$ and apply $z → z² + c$ again and again.',
+        'If $|z|$ ever passes 2, it **escapes** to infinity. The Mandelbrot set is every $c$ for which $z$ never escapes. Each pixel is one $c$: black pixels stay, and the colour of the others shows how many steps they took to escape.',
+      ]],
+      ['Why it’s cool', [
+        'The rule fits in one line, yet the edge of the set has detail at every scale. Zoom in and new shapes keep appearing, and small copies of the whole set turn up all along the edge.',
+        'The set is also all **one piece**: every speck is joined to the rest by thin filaments. That is far from obvious from the pictures, and it took until 1982 to prove.',
+      ]],
+      ['How this page draws it', [
+        'The GPU runs the loop for every pixel until $|z| > 2$ or a step limit. Points near the edge take longer to decide, so the limit grows as you zoom.',
+        'The GPU’s 32-bit numbers run out of digits at about $10⁶×$. Deeper, the page uses **perturbation**: the CPU computes one point’s orbit with as many digits as the zoom needs, and each pixel iterates only its small difference from that orbit.',
+      ]],
+    ]),
     control: 'steps',
     codeFile: 'escape-time.js',
     codeLang: 'JavaScript',
@@ -118,53 +136,40 @@ function escapeTime(cx, cy, maxSteps) {
   }
   return -1; // stayed: “in the set”
 }`),
+  }),
+  level(2, 'pro', 'Pro', {
+    formula: 'M = { c ∈ ℂ : fⁿ(0) bounded }',
+    sections: sections([
+      ['What it is', [
+        '$M$ is the set of $c ∈ ℂ$ for which the orbit of the critical point 0 under $f(z) = z² + c$ is bounded. It is the connectedness locus of the quadratic family: $c ∈ M$ exactly when the Julia set of $f$ is connected, and for $c ∉ M$ the Julia set is a Cantor set.',
+      ]],
+      ['Why it’s cool', [
+        '$M$ is compact and connected (Douady and Hubbard, 1982), yet its boundary has Hausdorff dimension 2 (Shishikura, 1998). Small copies of $M$ lie arbitrarily close to every boundary point, and $M$ turns up in many other families of maps (McMullen, 2000).',
+        'Whether $M$ is locally connected is still open. A proof would show that hyperbolic maps are dense in the quadratic family.',
+      ]],
+      ['How this page draws it', [
+        '**Perturbation.** One reference orbit $Zₙ$ is computed in arbitrary precision, with bits scaled to the zoom. Each pixel iterates $δz ← 2Zₙδz + δz² + δc$ in f32 on the GPU.',
+        '**Rebasing** (Zhuoran, 2021). When $|Zₙ + δz| < |δz|$, the pixel sets $δz ← Zₙ + δz$ and restarts the reference at 0. One reference then serves the whole view, with no glitch detection.',
+        '**Bilinear approximation.** A table of steps $δz ← Aδz + Bδc$, each valid while $|δz| < r$, skips most iterations at depth.',
+        'Pixels whose derivative $|dz/dz₁|$ falls below $10⁻³$ are taken as interior and stop early. Edges are shaded by the exterior distance estimate. f32’s exponent ends near $10⁻³⁸$, which is why the zoom stops near $10³⁴×$.',
+      ]],
+    ]),
     claims: [
       claim(1, '$M = {c ∈ ℂ : zₙ stays bounded}$, where $z₀ = 0$ and $zₙ₊₁ = zₙ² + c$.', 'This is the standard definition. Bounded means one disc holds every $zₙ$.'),
-      claim(2, 'If $|zₙ| > 2$ at any step, the orbit escapes to infinity.', 'Suppose $|z| > 2$ and $|z| ≥ |c|$. Then $|z² + c| ≥ |z|² − |c| ≥ |z|(|z| − 1)$, so each step multiplies $|z|$ by more than 1, and the factor grows. If $|c| > 2$, the condition holds at $z₁ = c$. This is why the code tests `x*x + y*y > 4`.'),
+      claim(2, 'If $|zₙ| > 2$ at any step, the orbit escapes to infinity.', 'Suppose $|z| > 2$ and $|z| ≥ |c|$. Then $|z² + c| ≥ |z|² − |c| ≥ |z|(|z| − 1)$, so each step multiplies $|z|$ by more than 1, and the factor grows. If $|c| > 2$, the condition holds at $z₁ = c$. This is why the escape test is $|z|² > 4$.'),
       claim(3, '$M$ is closed, lies in the disc $|c| ≤ 2$, and is connected.', 'The first two follow from fact 2. Connectedness is much deeper: Douady and Hubbard proved it in 1982.'),
+      claim(4, '$f$ has at most one attracting cycle. If it has one, the orbit of 0 falls into it.', 'Fatou showed that every attracting cycle of a polynomial attracts a critical point. Since $f′(z) = 2z$, the only critical point is 0.'),
+      claim(5, 'The period of that cycle is the same across a whole hyperbolic component of $M$.', 'The cycle moves continuously with $c$ and cannot change its period while it stays attracting.'),
     ],
     sources: sources([
-      WIKIPEDIA,
+      ['Mandelbrot set, Wikipedia ↗', 'https://en.wikipedia.org/wiki/Mandelbrot_set'],
       ['A. Douady, J. H. Hubbard. Itération des polynômes quadratiques complexes. C. R. Acad. Sci. Paris 294, 1982.', ''],
       ['J. Milnor. Dynamics in One Complex Variable, 3rd ed. Princeton, 2006.', ''],
+      ['M. Shishikura. The Hausdorff dimension of the boundary of the Mandelbrot set and Julia sets. Annals of Mathematics 147, 1998.', ''],
+      ['C. McMullen. The Mandelbrot set is universal. In The Mandelbrot Set, Theme and Variations, Cambridge, 2000.', ''],
+      ['C. Heiland-Allen. Deep zoom theory and practice (again), mathr.co.uk, 2022 ↗', 'https://mathr.co.uk/blog/2022-02-21_deep_zoom_theory_and_practice_again.html'],
     ]),
   }),
-  chapter(2, 'Follow a point', {
-    paras: [
-      'Hold the pointer over any spot. The dots trace its **orbit**: the values of $z$, one step at a time, as the rule runs.',
-      'Outside the set, the orbit spirals outwards. Once it leaves the circle of radius 2, it never comes back.',
-      'Inside the set, the orbit settles down. Sometimes it closes in on one point. Sometimes it hops around a loop of 2, 3 or more points, forever.',
-      'Near the edge, a point can wander for thousands of steps before it decides. That indecision is where all the detail lives.',
-    ].map((p, i) => ({ id: `p${i}`, runs: runs(p, `p${i}r`) })),
-    control: 'pin',
-    codeFile: 'orbit.rs',
-    codeLang: 'Rust',
-    code: code(`/// Every z on the way, for one point c.
-type C64 = Complex<f64>;
-fn orbit(c: C64, max: usize) -> Vec<C64> {
-  let mut z = C64::new(0.0, 0.0);
-  let mut path = Vec::with_capacity(max);
-  for _ in 0..max {
-    z = z * z + c;
-    path.push(z);
-    if z.norm_sqr() > 4.0 {
-      break; // escaped: no way back
-    }
-  }
-  path
-}`),
-    claims: [
-      claim(1, 'The orbit of 0 is $0, c, c² + c, (c² + c)² + c, …$', 'Each term is $f(z) = z² + c$ applied to the term before. Chapter 1’s test stops it as soon as $|z| > 2$.'),
-      claim(2, '$f$ has at most one attracting cycle. If it has one, the orbit of 0 falls into it.', 'Fatou showed that every attracting cycle of a polynomial attracts a critical point. Since $f′(z) = 2z$, the only critical point is 0.'),
-      claim(3, 'The period of that cycle is the same across a whole bulb of the set.', 'The cycle moves continuously with $c$ and cannot change its period while it stays attracting. Chapter 4 colours the bulbs by period.'),
-    ],
-    sources: sources([['J. Milnor. Dynamics in One Complex Variable, 3rd ed. Princeton, 2006. Section 8 covers Fatou’s theorem.', ''], WIKIPEDIA]),
-  }),
-  chapter(3, 'Colour by escape time'),
-  chapter(4, 'The big cardioid and its bulbs'),
-  chapter(5, 'Julia sets'),
-  chapter(6, 'The deep zoom'),
-  chapter(7, 'How this page works'),
 ];
 
 // The picture's colour themes, in the order of the shader's palettes. Each

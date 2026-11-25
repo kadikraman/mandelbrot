@@ -43,12 +43,17 @@ shape Theme
   name: string
   swatch: string
 
-shape Chapter
+shape Section
   id: string
-  number: number
   title: string
-  formula: string
   paras: Para[]
+
+shape Level
+  id: string
+  index: number
+  label: string
+  formula: string
+  sections: Section[]
   control: string
   codeFile: string
   codeLang: string
@@ -171,55 +176,31 @@ style Well
   background-color = "rgba(255, 255, 255, 0.06)"
   box-shadow = "inset 0 0 0 1px rgba(255, 255, 255, 0.10)"
 
-style TocItem
-  appearance = "none"
-  display = "flex"
-  flex-direction = "row"
-  align-items = "center"
-  gap = 12
-  min-height = 40
-  padding = "8px 10px"
-  border-radius = 6
-  background-color = "transparent"
-  color = "#e6edf3"
-  font-size = 15
-  text-align = "left"
-  :hover
-    background-color = "rgba(255, 255, 255, 0.08)"
-  :checked
-    background-color = "rgba(255, 255, 255, 0.14)"
-  :focus-visible
-    box-shadow = "0 0 0 2px #4aa8ff"
-
 // One page, rendered at build time so its head (title, description and share
 // image) is in the HTML that link previews read.
 routes nav
   home "/" render=build
 
-fn titleAt(chapters: Chapter[], i: number): string = match chapters.at(i) { case some(c) => c.title, case none => "" }
-
-
 component Mandelbrot
   resource view = exactSurface("mandel") as shape View
   resource viewport = exactViewport() as shape Viewport
-  resource chapters = chapters() as shape Chapter[] else empty()
+  resource levels = levels() as shape Level[] else empty()
   resource themes = themes() as shape Theme[] else empty()
   state theme = 0 persist
   state zoomOut = false
   state showBox = false
-  state chapter = 0
+  state level = 0 persist
   state explainerOpen = false
-  state contentsOpen = false
   state sheet = 0
-  state codeOpen: number[] = []
-  state mathsOpen: number[] = []
-  // Chapter 1's slider caps the iterations once the reader moves it, while chapter 1 shows.
+  state codeOpen = false
+  state mathsOpen = false
+  // The slider caps the iterations once the reader moves it, while its level shows.
   state steps = 12
   state stepsMoved = false
   state noGpu = false
   derive phone = viewport.width < 720
-  derive current = chapters.at(chapter)
-  derive capped = stepsMoved and chapter == 0 and (phone ? sheet > 0 : explainerOpen)
+  derive current = levels.at(level)
+  derive capped = stepsMoved and level == 1 and (phone ? sheet > 0 : explainerOpen)
   task gpuCheck mount
     after(5000, checkGpu)
   action checkGpu
@@ -235,19 +216,16 @@ component Mandelbrot
   action hovered(on: bool)
     if not on
       postMessage("hover-off", "mandel")
-  action go(n: number)
-    chapter = n
-    contentsOpen = false
+  action pickLevel(n: number)
+    level = n
   action toggleExplainer
     explainerOpen = not explainerOpen
-  action toggleContents
-    contentsOpen = not contentsOpen
   action setSheet(h: number)
     sheet = h
-  action toggleCode(n: number)
-    codeOpen = codeOpen.includes(n) ? codeOpen.filter(x => x != n) : codeOpen.concat([n])
-  action toggleMaths(n: number)
-    mathsOpen = mathsOpen.includes(n) ? mathsOpen.filter(x => x != n) : mathsOpen.concat([n])
+  action toggleCode
+    codeOpen = not codeOpen
+  action toggleMaths
+    mathsOpen = not mathsOpen
   action setSteps(v: number)
     steps = v
     stepsMoved = true
@@ -271,9 +249,9 @@ component Mandelbrot
       head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
       canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
       if noGpu
-        NoGpu(chapters=chapters, chapter=chapter, go=go, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone)
+        NoGpu(levels=levels, level=level, pickLevel=pickLevel, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone)
       else if phone
-        PhoneUi(view=view, height=viewport.height, chapters=chapters, chapter=chapter, go=go, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
+        PhoneUi(view=view, height=viewport.height, levels=levels, level=level, pickLevel=pickLevel, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
       else
         column class=Glass position="absolute" left=16 bottom=16 testId="explore"
           row align-items="center" gap=4 padding=6
@@ -310,47 +288,25 @@ component Mandelbrot
           text (view.sharp < 16 ? `Sharpening: pass ${view.sharp + 1} of 16` : "") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
         if explainerOpen
           column class=Glass position="absolute" top=16 right=16 bottom=16 width=400 overflow="hidden" testId="explainer"
-            column gap=10 padding="12px 12px 0 16px"
+            column gap=12 padding="12px 12px 12px 20px" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
               row align-items="center" gap=4
-                row flex=1 align-items="baseline" gap=8
-                  text "Mandelbrot" font-size=15 font-weight=600
-                  text "7 chapters" class=Secondary font-size=12
-                button class=Btn aria-pressed=(contentsOpen ? "true" : "false") press=toggleContents color="#9aa4ae" testId="contents"
-                  Icon(name="list", size=16)
-                  text "Contents"
+                text "Why is it cool?" role="heading" aria-level=2 flex=1 font-size=17 font-weight=600 testId="explainer-title"
                 button class=Btn press=toggleExplainer color="#9aa4ae" aria-keyshortcuts="E" testId="hide"
                   Icon(name="panel", size=16)
                   text "Hide"
                   text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)"
-              Stepper(count=chapters.length, chapter=chapter, go=go, tall=false)
+              LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false)
             scroll flex=1 min-height=0 padding="20px 20px 24px"
-              if contentsOpen
-                column gap=2
-                  text "Contents" class=Eyebrow margin-bottom=12
-                  for c in chapters key=c.id
-                    button class=TocItem aria-checked=(c.number - 1 == chapter) press=go(c.number - 1)
-                      text `${c.number}` class=Mono font-size=12 color="#9aa4ae" width=16
-                      text c.title
-              else
-                match current
-                  case some(ch)
-                    ChapterView(ch=ch, total=chapters.length, codeOpen=codeOpen.includes(chapter), mathsOpen=mathsOpen.includes(chapter), toggleCode=toggleCode(chapter), toggleMaths=toggleMaths(chapter), steps=steps, setSteps=setSteps, live=true, heading=true)
-                  case none
-                    text ""
-            row justify-content="space-between" align-items="center" padding="10px 12px" border-top="1px solid rgba(255, 255, 255, 0.10)"
-              button class=Btn press=go(chapter - 1) disabled=(chapter == 0) color="#9aa4ae" testId="previous"
-                Icon(name="left", size=16)
-                text "Previous"
-              if chapter + 1 < chapters.length
-                button class=Btn press=go(chapter + 1) box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" testId="next"
-                  text `Next: ${titleAt(chapters, chapter + 1)}`
-                  Icon(name="right", size=16)
+              match current
+                case some(lv)
+                  LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps, live=true)
+                case none
+                  text ""
         else
           row class=Glass position="absolute" top=16 right=16 padding=4
             button class=Btn height=36 padding="0 10px" press=toggleExplainer aria-keyshortcuts="E" testId="show"
               Icon(name="book", size=16)
-              text "Explainer"
-              text `${chapter + 1}/${chapters.length}` class=Mono font-size=12 color="#9aa4ae"
+              text "Why is it cool?"
               text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" color="#9aa4ae"
 
 // The Lucide icon of that name, in the current colour.
@@ -398,18 +354,12 @@ component Icon
         path d="M17 3h2a2 2 0 0 1 2 2v2"
         path d="M21 17v2a2 2 0 0 1-2 2h-2"
         path d="M7 21H5a2 2 0 0 1-2-2v-2"
-      if name == "list"
-        path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
       if name == "panel"
         rect x=3 y=3 width=18 height=18 rx=2
         path d="M15 3v18"
       if name == "book"
         path d="M12 7v14"
         path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"
-      if name == "left"
-        path d="m15 18-6-6 6-6"
-      if name == "right"
-        path d="m9 18 6-6-6-6"
       if name == "down"
         path d="m6 9 6 6 6-6"
       if name == "up"
@@ -448,11 +398,11 @@ component Runs
       else
         text r.text
 
-// One chapter: its plain tier, its control, and the code and maths tiers.
-component ChapterView
+// One level: its formula, its sections, its control, and the code and the
+// maths facts where it has them.
+component LevelView
   props
-    ch: Chapter
-    total: number
+    lv: Level
     codeOpen: bool
     mathsOpen: bool
     toggleCode: action
@@ -460,44 +410,39 @@ component ChapterView
     steps: number
     setSteps: action
     live: bool
-    // The phone's sheet shows the chapter's number and title in its own header.
-    heading: bool
   view
-    article display="flex" flex-direction="column" gap=16 aria-label=`Chapter ${ch.number}`
-      if heading
-        text `Chapter ${ch.number} of ${total}` class=Eyebrow
-      text ch.title role="heading" aria-level=2 font-size=22 font-weight=600 line-height=1.2 letter-spacing=-0.4 display=(heading ? "block" : "none") testId="chapter-title"
-      if ch.formula != ""
-        text ch.formula class=MathFont font-style="italic" font-size=30 text-align="center" padding="14px 0" border-top="1px solid rgba(255, 255, 255, 0.10)" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
-      for p in ch.paras key=p.id
-        text class=Para
-          Runs(runs=p.runs)
-      if ch.control == "steps"
+    article display="flex" flex-direction="column" gap=16 aria-label=lv.label testId=`level-${lv.id}`
+      if lv.formula != ""
+        text lv.formula class=MathFont font-style="italic" font-size=(lv.formula.length > 12 ? 22 : 30) text-align="center" padding="14px 0" border-top="1px solid rgba(255, 255, 255, 0.10)" border-bottom="1px solid rgba(255, 255, 255, 0.10)"
+      for sec in lv.sections key=sec.id
+        column gap=10
+          text sec.title role="heading" aria-level=3 font-size=15 font-weight=600
+          for p in sec.paras key=p.id
+            text class=Para
+              Runs(runs=p.runs)
+      if lv.control == "steps"
         column class=Well
           row justify-content="space-between"
             text "Steps to try" font-size=13 font-weight=500
             text `${steps}` class=Mono font-size=13 font-variant-numeric="tabular-nums"
           input type="range" min=1 max=200 step=1 value=steps accent-color="#e6edf3" input=setSteps disabled=(not live) aria-label="Steps to try" testId="steps"
           text (live ? "Few steps give a blobby outline. More steps carve the edge. Watch the picture change as you drag." : "Needs the live picture. You can still read on.") class=Secondary font-size=12 line-height=1.4
-      if ch.control == "pin"
-        column class=Well
-          text "Coming soon: the orbit of the point under the pointer, drawn on the picture." class=Secondary font-size=12 line-height=1.4
-      if ch.code.length > 0
+      if lv.code.length > 0
         column border-top="1px solid rgba(255, 255, 255, 0.10)"
           column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(codeOpen ? 16 : 0) gap=12
             button class=Disclosure press=toggleCode aria-expanded=codeOpen testId="code"
               row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
                 Icon(name="code", size=14)
               text (codeOpen ? "Hide the code" : "Show the code") flex=1 text-align="left"
-              text ch.codeLang class=Mono font-size=12 color="#9aa4ae"
+              text lv.codeLang class=Mono font-size=12 color="#9aa4ae"
               row class=Secondary
                 Icon(name=(codeOpen ? "up" : "down"), size=16)
             if codeOpen
               column border-radius=8 background-color="#0f1318" box-shadow="inset 0 0 0 1px #1f242c" overflow="hidden"
                 row height=32 align-items="center" padding="0 12px" border-bottom="1px solid #1f242c"
-                  text ch.codeFile class=Mono font-size=12 color="#9aa4ae"
+                  text lv.codeFile class=Mono font-size=12 color="#9aa4ae"
                 column padding="12px 14px" overflow-x="auto"
-                  for l in ch.code key=l.id
+                  for l in lv.code key=l.id
                     text class=Mono font-size=12.5 line-height=1.6 white-space="pre" min-height=20 padding-left=`${l.indent * 2}ch`
                       for r in l.runs key=r.id
                         if r.kind == "c"
@@ -510,17 +455,19 @@ component ChapterView
                           text r.text color="#7cc4ff"
                         else
                           text r.text
+      if lv.claims.length > 0
+        column border-top="1px solid rgba(255, 255, 255, 0.10)"
           column border-bottom="1px solid rgba(255, 255, 255, 0.10)" padding-bottom=(mathsOpen ? 16 : 0) gap=12
             button class=Disclosure press=toggleMaths aria-expanded=mathsOpen testId="maths"
               row width=24 height=24 align-items="center" justify-content="center" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" class=Secondary
                 Icon(name="sigma", size=14)
               text (mathsOpen ? "Hide the maths" : "Show the maths") flex=1 text-align="left"
-              text `${ch.claims.length} ${ch.claims.length == 1 ? "fact" : "facts"}` class=Mono font-size=12 color="#9aa4ae"
+              text `${lv.claims.length} ${lv.claims.length == 1 ? "fact" : "facts"}` class=Mono font-size=12 color="#9aa4ae"
               row class=Secondary
                 Icon(name=(mathsOpen ? "up" : "down"), size=16)
             if mathsOpen
               column gap=14
-                for c in ch.claims key=c.id
+                for c in lv.claims key=c.id
                   row gap=8
                     text c.id.slice(1) class=Mono font-size=12 color="#9aa4ae" width=20 line-height=1.9 flex-shrink=0
                     column gap=4 flex=1 min-width=0
@@ -530,25 +477,25 @@ component ChapterView
                         Runs(runs=c.why)
                 text "Sources" class=Eyebrow
                 column gap=6
-                  for s in ch.sources key=s.id
+                  for s in lv.sources key=s.id
                     if s.href != ""
                       link href=s.href font-size=13 color="#4aa8ff" text-decoration="underline"
                         text s.text
                     else
                       text s.text font-size=13
 
-// Seven segments, one per chapter; the current one is white.
-component Stepper
+// The three levels as one segmented control.
+component LevelSwitch
   props
-    count: number
-    chapter: number
-    go: action
+    levels: Level[]
+    level: number
+    pickLevel: action
     tall: bool
   view
-    nav display="flex" flex-direction="row" gap=4 aria-label="Chapters"
-      for i in range(count) key=i
-        button appearance="none" flex=1 height=(tall ? 44 : 20) padding=0 background-color="transparent" display="flex" align-items="center" press=go(i) aria-current=(i == chapter ? "step" : "false") aria-label=`Chapter ${i + 1}` testId=`step-${i + 1}`
-          view width="100%" height=4 border-radius=2 background-color=(i == chapter ? "#e6edf3" : "rgba(255, 255, 255, 0.22)")
+    row gap=2 padding=2 border-radius=8 background-color="rgba(255, 255, 255, 0.06)" box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.10)" role="radiogroup" aria-label="Explain it"
+      for lv in levels key=lv.id
+        button class=Seg flex=1 height=(tall ? 40 : 30) role="radio" aria-checked=(lv.index == level) press=pickLevel(lv.index) testId=`pick-${lv.id}`
+          text lv.label
 
 // The phone: a zoom chip, a dock of icon buttons, and the explainer as a sheet
 // at three heights (0 peek, 1 half, 2 full).
@@ -556,9 +503,9 @@ component PhoneUi
   props
     view: View
     height: number
-    chapters: Chapter[]
-    chapter: number
-    go: action
+    levels: Level[]
+    level: number
+    pickLevel: action
     zoomOut: bool
     pick: action
     showBox: bool
@@ -569,14 +516,14 @@ component PhoneUi
     reset: action
     sheet: number
     setSheet: action
-    codeOpen: number[]
-    mathsOpen: number[]
+    codeOpen: bool
+    mathsOpen: bool
     toggleCode: action
     toggleMaths: action
     steps: number
     setSteps: action
   derive sheetHeight = sheet == 0 ? 76 : sheet == 1 ? 420 : min(772, height - 72)
-  derive current = chapters.at(chapter)
+  derive current = levels.at(level)
   view
     column class=Glass position="absolute" top=12 left=12 gap=4 padding="8px 12px 9px" testId="chip"
       row align-items="center" gap=8
@@ -609,53 +556,39 @@ component PhoneUi
       if sheet == 0
         button appearance="none" background-color="transparent" color="#e6edf3" display="flex" flex-direction="row" align-items="center" gap=8 padding="0 16px" min-height=44 text-align="left" press=setSheet(1) testId="peek"
           column flex=1 gap=4
-            text `Chapter ${chapter + 1} of ${chapters.length}` class=Eyebrow
-            text titleAt(chapters, chapter) font-size=17 font-weight=600
+            text "Explain it" class=Eyebrow
+            text "Why is it cool?" font-size=17 font-weight=600
           Icon(name="up", size=20)
       else
-        row align-items="center" gap=4 padding="0 8px" min-height=52
-          button class=Btn width=44 height=44 padding=0 press=go(chapter - 1) disabled=(chapter == 0) aria-label="Previous chapter" testId="previous"
-            Icon(name="left", size=20)
-          column flex=1 min-width=0 gap=4
-            text `Chapter ${chapter + 1} of ${chapters.length}` class=Eyebrow
-            text titleAt(chapters, chapter) font-size=17 font-weight=600 white-space="nowrap" overflow="hidden" text-overflow="ellipsis"
-          button class=Btn width=44 height=44 padding=0 press=go(chapter + 1) disabled=(chapter + 1 >= chapters.length) aria-label="Next chapter" testId="next"
-            Icon(name="right", size=20)
+        row align-items="center" gap=4 padding="0 8px 0 16px" min-height=52
+          text "Why is it cool?" role="heading" aria-level=2 flex=1 font-size=17 font-weight=600 testId="explainer-title"
           button class=Btn width=44 height=44 padding=0 press=setSheet(0) aria-label="Collapse the explainer" testId="collapse"
             Icon(name="down", size=20)
-        column padding="0 16px"
-          Stepper(count=chapters.length, chapter=chapter, go=go, tall=true)
+        column padding="0 16px 8px"
+          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=true)
         scroll flex=1 min-height=0 padding="8px 16px 24px"
           match current
-            case some(ch)
-              ChapterView(ch=ch, total=chapters.length, codeOpen=codeOpen.includes(chapter), mathsOpen=mathsOpen.includes(chapter), toggleCode=toggleCode(chapter), toggleMaths=toggleMaths(chapter), steps=steps, setSteps=setSteps, live=true, heading=false)
+            case some(lv)
+              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps, live=true)
             case none
               text ""
 
-// Without WebGPU the page is for reading: the chapters beside a notice, and
+// Without WebGPU the page is for reading: the explainer beside a notice, and
 // the controls that need the picture disabled.
 component NoGpu
   props
-    chapters: Chapter[]
-    chapter: number
-    go: action
-    codeOpen: number[]
-    mathsOpen: number[]
+    levels: Level[]
+    level: number
+    pickLevel: action
+    codeOpen: bool
+    mathsOpen: bool
     toggleCode: action
     toggleMaths: action
     phone: bool
-  derive current = chapters.at(chapter)
+  derive current = levels.at(level)
   view
     scroll position="absolute" inset=0 background-color="#0b0f14" testId="reader"
-      row justify-content="center" gap=48 padding=(phone ? "16px" : "40px 24px")
-        if not phone
-          nav display="flex" flex-direction="column" width=240 flex-shrink=0 gap=2 aria-label="Chapters"
-            text "Mandelbrot" font-size=15 font-weight=600 padding="0 10px"
-            text "an explainer in 7 chapters" class=Secondary font-size=12 padding="0 10px" margin-bottom=12
-            for c in chapters key=c.id
-              button class=TocItem aria-checked=(c.number - 1 == chapter) press=go(c.number - 1)
-                text `${c.number}` class=Mono font-size=12 color="#9aa4ae" width=16
-                text c.title
+      row justify-content="center" padding=(phone ? "16px" : "40px 24px")
         column flex=1 max-width=640 min-width=0 gap=20
           row gap=12 align-items="flex-start" padding="14px 16px" border-radius=12 background-color="#161a20" box-shadow="inset 0 0 0 1px #30363d" testId="no-webgpu"
             row width=32 height=32 flex-shrink=0 align-items="center" justify-content="center" border-radius=8 background-color="rgba(33, 136, 255, 0.18)" color="#4aa8ff"
@@ -663,16 +596,10 @@ component NoGpu
             column gap=4 flex=1
               text "This browser can’t draw the live picture" role="heading" aria-level=2 font-size=15 font-weight=600
               text "The live picture needs WebGPU. Try a recent version of Chrome or Edge on a desktop computer. Everything else on this page still works: the text, the code and the maths." class=Secondary font-size=13 line-height=1.5
+          text "Why is it cool?" role="heading" aria-level=1 font-size=26 font-weight=600 letter-spacing=-0.4
+          LevelSwitch(levels=levels, level=level, pickLevel=pickLevel, tall=false)
           match current
-            case some(ch)
-              ChapterView(ch=ch, total=chapters.length, codeOpen=codeOpen.includes(chapter), mathsOpen=mathsOpen.includes(chapter), toggleCode=toggleCode(chapter), toggleMaths=toggleMaths(chapter), steps=12, setSteps=go, live=false, heading=true)
+            case some(lv)
+              LevelView(lv=lv, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=12, setSteps=pickLevel, live=false)
             case none
               text ""
-          row justify-content="space-between" padding-top=16 border-top="1px solid rgba(255, 255, 255, 0.10)"
-            button class=Btn press=go(chapter - 1) disabled=(chapter == 0) color="#9aa4ae"
-              Icon(name="left", size=16)
-              text "Previous"
-            if chapter + 1 < chapters.length
-              button class=Btn press=go(chapter + 1) box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)"
-                text `Next: ${titleAt(chapters, chapter + 1)}`
-                Icon(name="right", size=16)

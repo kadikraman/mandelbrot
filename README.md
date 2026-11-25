@@ -6,22 +6,23 @@ ordinary floating point gives up, and a short explainer beside it. Built with
 
 ![A spiral in Seahorse Valley at 25,600× zoom](docs/spiral.jpg)
 
-> Work in progress. The explainer has its first two chapters; chapters 3 to 7 are next.
-
 ## What it does
 
 - **Click to zoom.** A click zooms 4× around the point under the pointer. Option-click or
   right-click zooms the other way. Drag pans and the wheel zooms. On a phone, a tap zooms.
 - **Deep zoom.** The picture stays sharp to about 10³⁴×. There the GPU's 32-bit numbers run out, so
   the zoom stops and the page says so.
-- **An explainer beside the picture.** Seven short chapters. Each has a plain text that is always
-  shown, and a code tier and a maths tier that open on request. On a phone it is a sheet.
+- **An explainer beside the picture: "Why is it cool?"** It comes at three levels: "Like I'm 5",
+  "Some maths" and "Pro". Each level says what the set is, why it is remarkable and how this page
+  draws it. "Some maths" adds a slider that redraws the picture with fewer steps, and the
+  escape-time code; "Pro" adds the maths facts with their reasons, and sources. On a phone the
+  explainer is a sheet.
 - **Six colour themes.** The Colours menu switches the palette, and the page keeps the choice.
 - **The keyboard works too.** E opens and hides the explainer, + and − zoom, and the arrow keys pan.
 - **Readable without WebGPU.** Where the browser cannot draw the picture, the page becomes a
   reading layout with a notice.
 
-![The whole set with the explainer open on chapter 1](docs/explainer.jpg)
+![The whole set with the explainer open at the "Some maths" level](docs/explainer.jpg)
 
 ![A tiny copy of the set at 1.29 × 10²⁸× zoom](docs/deep.jpg)
 
@@ -52,7 +53,7 @@ palette every 512 counts, so deep views, where all counts are large, still show 
 | The pixel loop: perturbation, rebasing, BLA, colour | `gpu/shaders/mandel.wgsl` |
 | Previews, sharp passes and the view | `gpu/src/lib.rs`, `gpu/src/draw.rs` |
 | The page: controls and explainer | `app.contract` |
-| The chapters' text, code and maths | `content.ts` |
+| The explainer's text, code and maths | `content.ts` |
 
 ## Run it
 
@@ -108,8 +109,8 @@ npx eas-cli@latest deploy --export-dir ../dist --prod   # https://mandelbrot.exp
 ```
 app.contract        the page: the canvas, the explore controls and the explainer
 app.test.contract   the page's tests
-content.ts          the chapters' text, code and maths
-app.ts              serves the chapters to the page
+content.ts          the explainer's levels, and the colour themes
+app.ts              serves the levels and the themes to the page
 app.json            the app's name, id, icons and host
 assets/             the favicons and the share image
 gpu/                the renderer, a Rust crate on Exact's GPU surface
