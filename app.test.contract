@@ -24,3 +24,12 @@ test "the explainer moves between chapters, opens its tiers, and hides"
   expect tree missing "explainer"
   tap "show"
   expect tree has "explainer"
+
+test "the Colours menu picks a theme"
+  size 1440x900
+  clock data
+  expect tree has "chosen-warm"
+  tap "colours"
+  tap "theme-magma"
+  expect tree has "chosen-magma"
+  expect tree missing "chosen-warm"

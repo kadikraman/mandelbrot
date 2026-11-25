@@ -37,6 +37,12 @@ shape Source
   text: string
   href: string
 
+shape Theme
+  id: string
+  index: number
+  name: string
+  swatch: string
+
 shape Chapter
   id: string
   number: number
@@ -185,6 +191,11 @@ style TocItem
   :focus-visible
     box-shadow = "0 0 0 2px #4aa8ff"
 
+// One page, rendered at build time so its head (title, description and share
+// image) is in the HTML that link previews read.
+routes nav
+  home "/" render=build
+
 fn titleAt(chapters: Chapter[], i: number): string = match chapters.at(i) { case some(c) => c.title, case none => "" }
 
 
@@ -192,6 +203,8 @@ component Mandelbrot
   resource view = exactSurface("mandel") as shape View
   resource viewport = exactViewport() as shape Viewport
   resource chapters = chapters() as shape Chapter[] else empty()
+  resource themes = themes() as shape Theme[] else empty()
+  state theme = 0 persist
   state zoomOut = false
   state showBox = false
   state chapter = 0
@@ -215,6 +228,8 @@ component Mandelbrot
     zoomOut = out
   action toggleBox
     showBox = not showBox
+  action setTheme(n: number)
+    theme = n
   action reset
     postMessage("reset", "mandel")
   action hovered(on: bool)
@@ -253,11 +268,12 @@ component Mandelbrot
       postMessage("pan 0 -80", "mandel")
   view
     main testId="root" width="100%" height="100%" position="relative" overflow="hidden" background-color="#000000" color="#e6edf3" color-scheme="dark" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" key=key
-      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0)) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
+      head title="Mandelbrot" description="Zoom deep into the Mandelbrot set, and learn how one simple rule makes it." image="assets/og.png" canonical="/"
+      canvas surface=mandel(maxIter=(capped ? steps : 0), zoomOut=zoomOut, iterScale=1, bla=true, hoverBox=showBox, freeRight=((not phone and explainerOpen) ? 432 : 0), theme=theme) hover=hovered cursor=(zoomOut ? "zoom-out" : "zoom-in") position="absolute" inset=0 width="100%" height="100%" aria-label="The Mandelbrot set" role="img" testId="set"
       if noGpu
         NoGpu(chapters=chapters, chapter=chapter, go=go, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, phone=phone)
       else if phone
-        PhoneUi(view=view, height=viewport.height, chapters=chapters, chapter=chapter, go=go, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
+        PhoneUi(view=view, height=viewport.height, chapters=chapters, chapter=chapter, go=go, zoomOut=zoomOut, pick=pick, showBox=showBox, toggleBox=toggleBox, themes=themes, theme=theme, setTheme=setTheme, reset=reset, sheet=sheet, setSheet=setSheet, codeOpen=codeOpen, mathsOpen=mathsOpen, toggleCode=toggleCode, toggleMaths=toggleMaths, steps=steps, setSteps=setSteps)
       else
         column class=Glass position="absolute" left=16 bottom=16 testId="explore"
           row align-items="center" gap=4 padding=6
@@ -283,6 +299,10 @@ component Mandelbrot
             button class=Btn aria-pressed=(showBox ? "true" : "false") press=toggleBox testId="box"
               Icon(name="box", size=16)
               text "Zoom box"
+            button class=Btn popovertarget="theme-menu" testId="colours"
+              Icon(name="palette", size=16)
+              text "Colours"
+          ThemeMenu(themes=themes, theme=theme, setTheme=setTheme)
           if view.deepest
             text "This is the deepest zoom. The GPU's 32-bit numbers cannot go further, so zoom out or pan." font-size=12 line-height=1.3 padding="0 12px 8px" color="#ffb86b" role="status" testId="deepest"
           else
@@ -334,6 +354,22 @@ component Mandelbrot
               text "E" class=Mono font-size=11 padding="0 5px" height=18 line-height="18px" border-radius=4 box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.22)" color="#9aa4ae"
 
 // The Lucide icon of that name, in the current colour.
+// The colour themes, a menu opened by the Colours button.
+component ThemeMenu
+  props
+    themes: Theme[]
+    theme: number
+    setTheme: action
+  view
+    column id="theme-menu" popover="auto" role="menu" aria-label="Colours" class=Glass padding=6 gap=2 min-width=200 testId="theme-menu"
+      for t in themes key=t.id
+        button class=Btn justify-content="flex-start" gap=10 height=36 role="menuitemradio" aria-checked=(t.index == theme) press=setTheme(t.index) popovertarget="theme-menu" popovertargetaction="hide" testId=`theme-${t.id}`
+          view width=40 height=14 border-radius=4 background-image=t.swatch box-shadow="inset 0 0 0 1px rgba(255, 255, 255, 0.15)" flex-shrink=0
+          text t.name flex=1 text-align="left"
+          if t.index == theme
+            view display="flex" testId=`chosen-${t.id}`
+              Icon(name="check", size=16)
+
 component Icon
   props
     name: string
@@ -346,6 +382,14 @@ component Icon
         path d="M8 11h6"
         if name == "zoom-in"
           path d="M11 8v6"
+      if name == "palette"
+        path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"
+        circle cx=13.5 cy=6.5 r=0.5 fill="currentColor"
+        circle cx=17.5 cy=10.5 r=0.5 fill="currentColor"
+        circle cx=8.5 cy=7.5 r=0.5 fill="currentColor"
+        circle cx=6.5 cy=12.5 r=0.5 fill="currentColor"
+      if name == "check"
+        path d="M20 6 9 17l-5-5"
       if name == "reset"
         path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"
         path d="M3 3v5h5"
@@ -519,6 +563,9 @@ component PhoneUi
     pick: action
     showBox: bool
     toggleBox: action
+    themes: Theme[]
+    theme: number
+    setTheme: action
     reset: action
     sheet: number
     setSheet: action
@@ -553,6 +600,9 @@ component PhoneUi
           Icon(name="reset", size=20)
         button class=Btn width=44 height=44 padding=0 aria-pressed=(showBox ? "true" : "false") press=toggleBox aria-label="Zoom box" testId="box"
           Icon(name="box", size=20)
+        button class=Btn width=44 height=44 padding=0 popovertarget="theme-menu" aria-label="Colours" testId="colours"
+          Icon(name="palette", size=20)
+    ThemeMenu(themes=themes, theme=theme, setTheme=setTheme)
     column class=Glass position="absolute" left=0 right=0 bottom=0 height=sheetHeight border-radius="16px 16px 0 0" overflow="hidden" transition="height 180ms cubic-bezier(0.4, 0, 0.2, 1)" testId="sheet"
       button appearance="none" height=20 background-color="transparent" display="flex" justify-content="center" press=setSheet(sheet == 1 ? 2 : 1) aria-label=(sheet == 1 ? "Expand the explainer" : "Open the explainer") testId="grab"
         view width=36 height=5 border-radius=3 margin-top=6 background-color="rgba(255, 255, 255, 0.22)"

@@ -16,6 +16,7 @@ ordinary floating point gives up, and a short explainer beside it. Built with
   the zoom stops and the page says so.
 - **An explainer beside the picture.** Seven short chapters. Each has a plain text that is always
   shown, and a code tier and a maths tier that open on request. On a phone it is a sheet.
+- **Six colour themes.** The Colours menu switches the palette, and the page keeps the choice.
 - **The keyboard works too.** E opens and hides the explainer, + and − zoom, and the arrow keys pan.
 - **Readable without WebGPU.** Where the browser cannot draw the picture, the page becomes a
   reading layout with a notice.
@@ -41,7 +42,8 @@ zoom much deeper.
 The picture is drawn in two passes. While the view moves, a low-resolution preview is drawn in bands
 of rows, so no frame waits for the GPU. When the view rests, it sharpens to 16 samples a pixel.
 Pixels inside the set stop early, and edges are coloured by their distance to the set, so thin
-filaments stay visible.
+filaments stay visible. The colour follows the logarithm of the escape count, plus one loop of the
+palette every 512 counts, so deep views, where all counts are large, still show bands.
 
 | Part | Where |
 | --- | --- |
@@ -89,6 +91,18 @@ bun exact.mjs web-build --out dist   # the static site, for any static host
 bun exact.mjs serve dist             # serves it locally, as a host would
 ```
 
+## Deploy it
+
+The site is on [EAS Hosting](https://docs.expo.dev/eas/hosting/introduction/). `hosting/` holds
+the EAS project, because EAS reads an Expo `app.json` and this repo's `app.json` is Exact's.
+
+```sh
+bun exact.mjs web-build --out dist
+cd hosting
+npx eas-cli@latest deploy --export-dir ../dist          # a preview URL
+npx eas-cli@latest deploy --export-dir ../dist --prod   # https://mandelbrot.expo.app
+```
+
 ## Layout
 
 ```
@@ -96,11 +110,13 @@ app.contract        the page: the canvas, the explore controls and the explainer
 app.test.contract   the page's tests
 content.ts          the chapters' text, code and maths
 app.ts              serves the chapters to the page
-app.json            the app's name, id and host
+app.json            the app's name, id, icons and host
+assets/             the favicons and the share image
 gpu/                the renderer, a Rust crate on Exact's GPU surface
   src/              the view, the reference orbit, BLA and the GPU passes
   shaders/          WGSL for the set and the composite
 docs/               the pictures in this README
+hosting/            the EAS Hosting project
 ```
 
 ## Credits

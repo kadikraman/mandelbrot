@@ -6,6 +6,7 @@ export type Para = { id: string; runs: Run[] };
 export type CodeLine = { id: string; indent: number; runs: Run[] };
 export type Claim = { id: string; stmt: Run[]; why: Run[] };
 export type Source = { id: string; text: string; href: string };
+export type Theme = { id: string; index: number; name: string; swatch: string };
 export type Chapter = {
   id: string;
   number: number;
@@ -165,3 +166,14 @@ fn orbit(c: C64, max: usize) -> Vec<C64> {
   chapter(6, 'The deep zoom'),
   chapter(7, 'How this page works'),
 ];
+
+// The picture's colour themes, in the order of the shader's palettes. Each
+// swatch is the palette sampled once around its loop.
+export const THEMES: Theme[] = [
+  ['Warm', 'rgb(255, 231, 167), rgb(191, 114, 42), rgb(64, 11, 3), rgb(0, 24, 88), rgb(64, 141, 213), rgb(191, 244, 252), rgb(255, 231, 167)'],
+  ['Classic', 'rgb(0, 8, 99), rgb(33, 107, 204), rgb(237, 255, 255), rgb(255, 171, 0), rgb(0, 3, 0), rgb(0, 8, 99)'],
+  ['Ice', 'rgb(3, 5, 20), rgb(8, 43, 92), rgb(38, 140, 191), rgb(191, 242, 255), rgb(26, 76, 128), rgb(3, 5, 20)'],
+  ['Magma', 'rgb(5, 3, 15), rgb(82, 18, 120), rgb(184, 54, 120), rgb(250, 135, 79), rgb(252, 242, 191), rgb(5, 3, 15)'],
+  ['Ink', 'rgb(242, 237, 224), rgb(178, 176, 168), rgb(89, 89, 89), rgb(153, 150, 145), rgb(224, 219, 209), rgb(242, 237, 224)'],
+  ['Cool', 'rgb(88, 167, 167), rgb(3, 42, 42), rgb(42, 3, 3), rgb(167, 88, 88), rgb(252, 213, 213), rgb(213, 252, 252), rgb(88, 167, 167)'],
+].map(([name, stops], index) => ({ id: name.toLowerCase(), index, name, swatch: `linear-gradient(90deg, ${stops})` }));

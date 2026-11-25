@@ -77,6 +77,7 @@ pub struct SetPass {
     pub step: f64,
     pub dc: (f64, f64),
     pub max_iter: u32,
+    pub theme: u32,
     pub orbit_len: usize,
     /// BLA levels and the orbit points the table covers; 0 levels skips nothing.
     pub bla: (u32, usize),
@@ -333,6 +334,7 @@ impl Gpu {
             count_stats: if pass.count { 1.0 } else { 0.0 },
             bla_levels: pass.bla.0 as f32,
             bla_len: pass.bla.1 as f32,
+            theme: pass.theme as f32,
         };
         let slot = self.set_uniforms.write(queue, &uniforms.bytes());
         if pass.count && pass.rows.0 == 0 {

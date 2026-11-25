@@ -20,6 +20,8 @@ struct Uniforms {
     // BLA levels in `bla` (0: none yet), and the orbit points the table covers.
     bla_levels: f32,
     bla_len: f32,
+    // The palette: 0 Warm, 1 Classic, 2 Ice, 3 Magma, 4 Ink, 5 Cool.
+    theme: f32,
 }
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -37,10 +39,43 @@ fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
     return vec4<f32>(f32(i32(i & 1u) * 4 - 1), f32(i32(i >> 1u) * 4 - 1), 0.0, 1.0);
 }
 
-// Inigo Quilez's cosine palette: a + b·cos(2π(c·t + d)).
-fn palette(t: f32) -> vec3<f32> {
-    let d = vec3<f32>(0.0, 0.10, 0.20);
-    return 0.5 + 0.5 * cos(6.2831853 * (t + d));
+// Five colours around a loop, eased from one to the next as t goes 0 to 1.
+fn ramp(t: f32, c0: vec3<f32>, c1: vec3<f32>, c2: vec3<f32>, c3: vec3<f32>, c4: vec3<f32>) -> vec3<f32> {
+    let x = fract(t) * 5.0;
+    let i = u32(x);
+    let f = smoothstep(0.0, 1.0, fract(x));
+    var a = c4;
+    var b = c0;
+    if i == 0u { a = c0; b = c1; }
+    if i == 1u { a = c1; b = c2; }
+    if i == 2u { a = c2; b = c3; }
+    if i == 3u { a = c3; b = c4; }
+    return mix(a, b, f);
+}
+
+// Warm and Cool are Inigo Quilez's cosine palette, a + b·cos(2π(c·t + d)).
+// Classic is Ultra Fractal's default gradient.
+fn palette(t: f32, theme: u32) -> vec3<f32> {
+    switch theme {
+        case 1u {
+            return ramp(t, vec3(0.0, 0.03, 0.39), vec3(0.13, 0.42, 0.8), vec3(0.93, 1.0, 1.0), vec3(1.0, 0.67, 0.0), vec3(0.0, 0.01, 0.0));
+        }
+        case 2u {
+            return ramp(t, vec3(0.01, 0.02, 0.08), vec3(0.03, 0.17, 0.36), vec3(0.15, 0.55, 0.75), vec3(0.75, 0.95, 1.0), vec3(0.1, 0.3, 0.5));
+        }
+        case 3u {
+            return ramp(t, vec3(0.02, 0.01, 0.06), vec3(0.32, 0.07, 0.47), vec3(0.72, 0.21, 0.47), vec3(0.98, 0.53, 0.31), vec3(0.99, 0.95, 0.75));
+        }
+        case 4u {
+            return ramp(t, vec3(0.95, 0.93, 0.88), vec3(0.7, 0.69, 0.66), vec3(0.35, 0.35, 0.35), vec3(0.6, 0.59, 0.57), vec3(0.88, 0.86, 0.82));
+        }
+        case 5u {
+            return 0.5 + 0.5 * cos(6.2831853 * (t + vec3<f32>(0.3, 0.2, 0.2)));
+        }
+        default {
+            return 0.5 + 0.5 * cos(6.2831853 * (t + vec3<f32>(0.0, 0.10, 0.20)));
+        }
+    }
 }
 
 // |dz/dz₁|² below which a pixel is taken to be inside the set and stops. The
@@ -186,8 +221,10 @@ fn fs(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     }
     let r2 = dot(z, z);
     let smooth_n = f32(n) - log2(log2(r2)) + 4.0;
-    // Colour changes with the logarithm of the count, so bands stay wide at any depth.
-    let base = palette(0.45 * log2(smooth_n + 1.0));
+    // Colour changes with the logarithm of the count, so bands stay wide near the
+    // whole set, plus one loop each 512 counts, so a deep view, where every count
+    // is large and close to the others, still shows several bands.
+    let base = palette(0.45 * log2(smooth_n + 1.0) + smooth_n / 512.0, u32(u.theme));
     // Exterior distance estimate in pixels: 0.5·|z|·ln|z|² / |dz/dc · step|.
     // Filaments darken within about a pixel of the set and fade out smoothly;
     // a derivative past f32's range (or NaN) is a pixel at the edge.

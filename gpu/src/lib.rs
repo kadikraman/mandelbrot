@@ -41,6 +41,8 @@ const ANCHOR_REACH_STEPS: f64 = 1e6;
 /// works in f32, whose smallest normal number is about 1.2e-38; at 3 device
 /// pixels a point, a sample's offset within a pixel still stays above it.
 const MIN_STEP: f64 = 2e-37;
+/// The palettes in `mandel.wgsl`.
+const THEMES: u32 = 6;
 /// Samples summed per pixel once the view is still.
 const SAMPLES: u32 = 16;
 /// The share of escapes in the limit's top quarter that raises the limit.
@@ -106,6 +108,7 @@ struct Key {
     max_iter: u32,
     reference: u64,
     bla: bool,
+    theme: u32,
 }
 
 /// The preview shown: drawn at a low resolution, moved to the current view.
@@ -199,6 +202,8 @@ pub struct MandelSurface {
     bla: Option<(u64, u32, usize, f64)>,
     /// Draw without BLA, to compare.
     bla_off: bool,
+    /// The colour theme, an index into the shader's palettes.
+    theme: u32,
     gpu: Option<Gpu>,
 }
 
@@ -247,6 +252,7 @@ impl Default for MandelSurface {
             uploaded: 0,
             bla: None,
             bla_off: false,
+            theme: 0,
             gpu: None,
         }
     }
@@ -571,13 +577,15 @@ impl Surface for MandelSurface {
             ("hoverBox", Value::Bool(false)),
             ("autoRun", Value::Number(0.0)),
             ("freeRight", Value::Number(0.0)),
+            ("theme", Value::Number(0.0)),
         ]
     }
 
     fn bind(&mut self, inputs: &[Value], _: Option<f64>) -> Result<(), SurfaceError> {
-        let [max_iter, auto, zoom_out, iter_scale, bla, hover_box, auto_run, free_right] = inputs else {
-            return Err(SurfaceError(format!("mandel: expected 8 inputs, got {}", inputs.len())));
+        let [max_iter, auto, zoom_out, iter_scale, bla, hover_box, auto_run, free_right, theme] = inputs else {
+            return Err(SurfaceError(format!("mandel: expected 9 inputs, got {}", inputs.len())));
         };
+        self.theme = number(theme, "theme")?.clamp(0.0, (THEMES - 1) as f64) as u32;
         self.set_auto_run(number(auto_run, "autoRun")?);
         self.set_free_right(number(free_right, "freeRight")?.max(0.0) as f32);
         let Value::Bool(bla) = bla else {
@@ -763,7 +771,7 @@ impl Surface for MandelSurface {
 
         let (width, height) = frame.pixels();
         let dpr = frame.scale as f64;
-        let key = Key { view: self.view, max_iter, reference: self.reference_generation, bla: !self.bla_off };
+        let key = Key { view: self.view, max_iter, reference: self.reference_generation, bla: !self.bla_off, theme: self.theme };
         let (hover_box, zoom_out) = (self.hover_box(), self.zooms_out());
         let reference = self.reference.as_ref().unwrap();
         let (ref_offset, orbit_len) = (reference.offset, reference.orbit.points.len());
@@ -804,6 +812,7 @@ impl Surface for MandelSurface {
             step: key.view.step / (dpr * w as f64 / width as f64),
             dc: (key.view.cx - ref_offset.0, key.view.cy - ref_offset.1),
             max_iter: key.max_iter,
+            theme: key.theme,
             orbit_len,
             bla: bla_now,
             jitter: (0.0, 0.0),

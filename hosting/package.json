@@ -1,0 +1,5 @@
+{
+  "name": "mandelbrot-hosting",
+  "private": true,
+  "description": "The EAS Hosting project: `eas deploy --export-dir ../dist` publishes what `bun exact.mjs web-build --out dist` built."
+}

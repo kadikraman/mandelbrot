@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Mandelbrot",
+    "slug": "mandelbrot",
+    "extra": {
+      "eas": {
+        "projectId": "b0ffdd18-6a27-43d6-be46-bdd375220d65"
+      }
+    }
+  }
+}

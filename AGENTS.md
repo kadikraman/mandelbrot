@@ -40,6 +40,13 @@ and how to run it; read it first.
 - **The explainer's words are in `content.ts`**, not in `app.contract`. Prose marks maths with
   `$…$`, bold with `**…**` and code with backticks; the page draws the runs. The look (colours,
   sizes, glass) is the `style` blocks at the top of `app.contract`; keep new parts on them.
+- **The colour themes are the `palette` function in `gpu/shaders/mandel.wgsl`.** `THEMES` in
+  `content.ts` lists them in the same order, with a CSS gradient for each menu swatch; a new theme
+  needs both, and `THEMES` in `gpu/src/lib.rs` counts them.
+- **The page is one route, `home "/" render=build`.** Exact writes the Contract `head` (title,
+  description, share image) only into a rendered page, and refuses the same tags in `app.json`.
+  `app.json`'s `app.origin` makes the share image's URL absolute.
+- **`assets/` holds the favicons (`icons` in `app.json`) and the share image `og.png`.**
 - **Icons are Lucide's shapes**, drawn inline by the `Icon` component. Take new ones from Lucide
   too; `NOTICE` carries its licence.
 - **The README's pictures are in `docs/`.** Retake them when the look changes.
@@ -47,6 +54,8 @@ and how to run it; read it first.
   rebuild; never edit the generated code.
 - **Web only.** Do not run the native verbs (`ios`, `mac`, `linux`, `android`, `windows`): each one
   adds a platform to `app.json`.
+- **`hosting/` is the EAS Hosting project**, kept apart because EAS reads an Expo `app.json`. The
+  README's "Deploy it" has the commands. Deploy only when the owner asks.
 - **Commit on `main`.** There are no task branches or PRs in this repo.
 - **Keep the README and this file current** when a command, a file or the layout changes. People
   read both.
