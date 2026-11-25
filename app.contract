@@ -618,7 +618,7 @@ component PhoneUi
     else
       setSheet(1)
   view
-    column class=Glass position="absolute" top=12 left=12 gap=4 padding="8px 12px 9px" testId="chip"
+    column class=Glass position="absolute" top=72 left=12 gap=4 padding="8px 12px 9px" testId="chip"
       row align-items="center" gap=8
         if view.sharp < 16
           Ring(passes=view.sharp)
@@ -628,20 +628,20 @@ component PhoneUi
         text "Deepest zoom: zoom out or pan" font-size=12 color="#ffb86b" role="status" testId="deepest"
       else
         text `Tap zooms ${zoomOut ? "out" : "in"} 4×` class=Secondary font-size=12
-    if sheet < 2
-      row class=Glass position="absolute" left="50%" translate="-50% 0" bottom=(shownHeight + 12) align-items="center" gap=4 padding=4 border-radius=14 testId="dock"
-        row gap=2 padding=2 border-radius=10 background-color="rgba(255, 255, 255, 0.06)" role="radiogroup" aria-label="Tap to"
-          button class=Seg width=44 height=40 padding=0 role="radio" aria-checked=(not zoomOut) press=pick(false) aria-label="Zoom in" testId="mode-in"
-            Icon(name="zoom-in", size=20)
-          button class=Seg width=44 height=40 padding=0 role="radio" aria-checked=zoomOut press=pick(true) aria-label="Zoom out" testId="mode-out"
-            Icon(name="zoom-out", size=20)
-        view class=Divider
-        button class=Btn width=44 height=44 padding=0 press=reset aria-label="Reset" testId="reset"
-          Icon(name="reset", size=20)
-        button class=Btn width=44 height=44 padding=0 aria-pressed=(showBox ? "true" : "false") press=toggleBox aria-label="Zoom box" testId="box"
-          Icon(name="box", size=20)
-        button class=Btn width=44 height=44 padding=0 popovertarget="theme-menu" aria-label="Colours" testId="colours"
-          Icon(name="palette", size=20)
+    // The dock stays at the top, clear of the sheet, so it never moves as the sheet does.
+    row class=Glass position="absolute" left="50%" translate="-50% 0" top=12 align-items="center" gap=4 padding=4 border-radius=14 testId="dock"
+      row gap=2 padding=2 border-radius=10 background-color="rgba(255, 255, 255, 0.06)" role="radiogroup" aria-label="Tap to"
+        button class=Seg width=44 height=40 padding=0 role="radio" aria-checked=(not zoomOut) press=pick(false) aria-label="Zoom in" testId="mode-in"
+          Icon(name="zoom-in", size=20)
+        button class=Seg width=44 height=40 padding=0 role="radio" aria-checked=zoomOut press=pick(true) aria-label="Zoom out" testId="mode-out"
+          Icon(name="zoom-out", size=20)
+      view class=Divider
+      button class=Btn width=44 height=44 padding=0 press=reset aria-label="Reset" testId="reset"
+        Icon(name="reset", size=20)
+      button class=Btn width=44 height=44 padding=0 aria-pressed=(showBox ? "true" : "false") press=toggleBox aria-label="Zoom box" testId="box"
+        Icon(name="box", size=20)
+      button class=Btn width=44 height=44 padding=0 popovertarget="theme-menu" aria-label="Colours" testId="colours"
+        Icon(name="palette", size=20)
     ThemeMenu(themes=themes, theme=theme, setTheme=setTheme)
     column class=Glass position="absolute" left=0 right=0 bottom=0 height=shownHeight border-radius="16px 16px 0 0" overflow="hidden" transition=((still or dragging) ? "none" : "height 220ms cubic-bezier(0.2, 0, 0, 1)") testId="sheet"
       column touch-action="none" cursor="grab" pointerdown=grabStart pointermove=grabMove pointerup=grabEnd pointercancel=grabEnd testId="drag"
