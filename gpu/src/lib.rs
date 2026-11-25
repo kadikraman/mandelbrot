@@ -343,6 +343,33 @@ impl MandelSurface {
         self.refit();
     }
 
+    /// A panel opens or closes: the whole set refits; any other view moves by
+    /// half the panel's width, so what was centred in the free area stays centred.
+    fn set_free_right(&mut self, free_right: f32) {
+        if free_right == self.free_right {
+            return;
+        }
+        let shift = (free_right - self.free_right) as f64 * 0.5;
+        let home = self.home_view();
+        let at_home = (self.target.cx - home.cx).abs() < home.step && (self.target.cy - home.cy).abs() < home.step && (self.target.step / home.step - 1.0).abs() < 1e-6;
+        self.free_right = free_right;
+        if self.touched && at_home {
+            // The whole set stays whole: it eases to fit the new free area.
+            let home = self.home_view();
+            self.home_step = home.step;
+            self.ease_to(home);
+            return;
+        }
+        if self.touched {
+            self.view.cx += shift * self.view.step;
+            self.target.cx += shift * self.target.step;
+            if let Some(ease) = self.ease.as_mut() {
+                ease.from.cx += shift * ease.from.step;
+            }
+        }
+        self.refit();
+    }
+
     fn refit(&mut self) {
         let home = self.home_view();
         self.home_step = home.step;
@@ -542,11 +569,7 @@ impl Surface for MandelSurface {
             return Err(SurfaceError(format!("mandel: expected 8 inputs, got {}", inputs.len())));
         };
         self.set_auto_run(number(auto_run, "autoRun")?);
-        let free_right = number(free_right, "freeRight")?.max(0.0) as f32;
-        if free_right != self.free_right {
-            self.free_right = free_right;
-            self.refit();
-        }
+        self.set_free_right(number(free_right, "freeRight")?.max(0.0) as f32);
         let Value::Bool(bla) = bla else {
             return Err(SurfaceError("mandel.bla: expected a boolean".into()));
         };
@@ -1221,12 +1244,35 @@ mod tests {
     #[test]
     fn the_whole_set_centres_left_of_the_panel() {
         let mut s = surface();
-        s.free_right = 400.0;
+        s.set_free_right(400.0);
         s.resize(1200.0, 800.0);
         let (ax, _) = s.anchor_f64;
         // The set's centre is in the middle of the 800 points left of the panel.
         let (x, _) = s.plane_at(s.view, 400.0, 400.0);
         assert!((x + ax - HOME.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn opening_the_panel_keeps_the_view_centred_in_the_free_area() {
+        let mut s = surface();
+        s.click(300.0, 200.0, false);
+        s.view = s.target;
+        s.ease = None;
+        let before = s.plane_at(s.view, 400.0, 300.0);
+        s.set_free_right(400.0);
+        // The free area is now 400 points wide: its centre is at x = 200.
+        let after = s.plane_at(s.view, 200.0, 300.0);
+        assert!((before.0 - after.0).abs() < 1e-12 && (before.1 - after.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn opening_the_panel_refits_the_whole_set() {
+        let mut s = surface();
+        s.click(300.0, 200.0, false);
+        s.reset();
+        s.set_free_right(400.0);
+        let home = s.home_view();
+        assert_eq!((s.target.cx, s.target.cy, s.target.step), (home.cx, home.cy, home.step));
     }
 
     #[test]

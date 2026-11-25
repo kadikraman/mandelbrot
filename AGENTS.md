@@ -40,6 +40,9 @@ and how to run it; read it first.
 - **The explainer's words are in `content.ts`**, not in `app.contract`. Prose marks maths with
   `$…$`, bold with `**…**` and code with backticks; the page draws the runs. The look (colours,
   sizes, glass) is the `style` blocks at the top of `app.contract`; keep new parts on them.
+- **Icons are Lucide's shapes**, drawn inline by the `Icon` component. Take new ones from Lucide
+  too; `NOTICE` carries its licence.
+- **The README's pictures are in `docs/`.** Retake them when the look changes.
 - **Shaders are in `gpu/shaders/`.** `build.rs` generates their Rust bindings, so edit the WGSL and
   rebuild; never edit the generated code.
 - **Web only.** Do not run the native verbs (`ios`, `mac`, `linux`, `android`, `windows`): each one
