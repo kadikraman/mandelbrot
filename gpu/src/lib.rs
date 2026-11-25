@@ -37,6 +37,10 @@ const HOME: (f64, f64) = (-0.6, 0.0);
 const REFERENCE_REACH_PX: f64 = 1e5;
 /// An offset from the anchor this many steps long moves the anchor.
 const ANCHOR_REACH_STEPS: f64 = 1e6;
+/// The smallest step, in plane units a canvas point, the zoom goes to. The GPU
+/// works in f32, whose smallest normal number is about 1.2e-38; at 3 device
+/// pixels a point, a sample's offset within a pixel still stays above it.
+const MIN_STEP: f64 = 2e-37;
 /// Samples summed per pixel once the view is still.
 const SAMPLES: u32 = 16;
 /// The share of escapes in the limit's top quarter that raises the limit.
@@ -70,8 +74,14 @@ impl View {
     }
 
     /// This view scaled by `factor` around plane point (px, py), which stays put.
+    /// The step stops at `MIN_STEP`.
     fn scaled_about(self, px: f64, py: f64, factor: f64) -> View {
+        let factor = factor.max(MIN_STEP / self.step).min(factor.max(1.0));
         View { cx: px + (self.cx - px) * factor, cy: py + (self.cy - py) * factor, step: self.step * factor }
+    }
+
+    fn deepest(self) -> bool {
+        self.step <= MIN_STEP * (1.0 + 1e-9)
     }
 }
 
@@ -329,7 +339,7 @@ impl MandelSurface {
     /// The same box for both directions; zooming out, the current view shrinks into it.
     pub fn hover_box(&self) -> Option<[f32; 4]> {
         let (x, y) = self.hover?;
-        if !self.show_box || self.press.as_ref().is_some_and(|p| p.dragged) {
+        if !self.show_box || self.press.as_ref().is_some_and(|p| p.dragged) || (self.target.deepest() && !self.zooms_out()) {
             return None;
         }
         let k = 1.0 / CLICK_ZOOM as f32;
@@ -460,7 +470,7 @@ impl MandelSurface {
         let parts: Vec<&str> = args.split_whitespace().collect();
         let [x, y, zoom] = parts[..] else { return };
         let Ok(zoom) = zoom.parse::<f64>() else { return };
-        let step = self.home_step / zoom.max(1.0);
+        let step = (self.home_step / zoom.max(1.0)).max(MIN_STEP);
         let bits = deep::bits_for(step / CLICK_ZOOM);
         let Some(anchor) = Point::parse(x, y, bits) else { return };
         self.anchor_f64 = anchor.approx();
@@ -678,9 +688,10 @@ impl Surface for MandelSurface {
         sorted.sort_by(f64::total_cmp);
         let at = |q: f64| sorted.get(((sorted.len() as f64 - 1.0) * q).round() as usize).copied().unwrap_or(0.0);
         Some(format!(
-            r#"{{"zoom":{},"zoomLabel":"{}","autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
+            r#"{{"zoom":{},"zoomLabel":"{}","deepest":{},"autoRunning":{},"clicks":{},"frameP50":{:.1},"frameP95":{:.1},"frames":{},"scale":{:.2},"iterations":{},"bits":{},"orbit":{},"sharp":{},"bla":{}}}"#,
             zoom,
             zoom_label(zoom),
+            self.target.deepest(),
             self.auto_running(),
             self.clicks,
             at(0.5),
@@ -1273,6 +1284,27 @@ mod tests {
         s.set_free_right(400.0);
         let home = s.home_view();
         assert_eq!((s.target.cx, s.target.cy, s.target.step), (home.cx, home.cy, home.step));
+    }
+
+    #[test]
+    fn the_zoom_stops_where_f32_runs_out() {
+        let mut s = surface();
+        let deep = s.home_step / MIN_STEP;
+        s.goto(&format!("-0.75 0.1 {}", deep / 2.0));
+        assert!(!s.target.deepest());
+        let point = s.plane_at(s.target, 600.0, 150.0);
+        s.click(600.0, 150.0, false);
+        assert!(s.target.deepest() && s.target.step == MIN_STEP);
+        let still = s.plane_at(s.target, 600.0, 150.0);
+        assert!((still.0 - point.0).abs() < MIN_STEP && (still.1 - point.1).abs() < MIN_STEP);
+        let stopped = s.target;
+        s.click(600.0, 150.0, false);
+        assert_eq!(s.target, stopped);
+        s.view = s.target;
+        s.wheel(-500.0, 100.0, 100.0);
+        assert_eq!(s.target, stopped);
+        s.click(600.0, 150.0, true);
+        assert!(s.target.step > stopped.step * 3.9);
     }
 
     #[test]

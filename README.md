@@ -12,7 +12,8 @@ ordinary floating point gives up, and a short explainer beside it. Built with
 
 - **Click to zoom.** A click zooms 4× around the point under the pointer. Option-click or
   right-click zooms the other way. Drag pans and the wheel zooms. On a phone, a tap zooms.
-- **Deep zoom.** The picture stays sharp past 10²⁸×.
+- **Deep zoom.** The picture stays sharp to about 10³⁴×. There the GPU's 32-bit numbers run out, so
+  the zoom stops and the page says so.
 - **An explainer beside the picture.** Seven short chapters. Each has a plain text that is always
   shown, and a code tier and a maths tier that open on request. On a phone it is a sheet.
 - **The keyboard works too.** E opens and hides the explainer, + and − zoom, and the arrow keys pan.

@@ -5,6 +5,7 @@
 shape View
   zoom: number
   zoomLabel: string
+  deepest: bool
   sharp: number
   presented: bool
 
@@ -282,7 +283,10 @@ component Mandelbrot
             button class=Btn aria-pressed=(showBox ? "true" : "false") press=toggleBox testId="box"
               Icon(name="box", size=16)
               text "Zoom box"
-          text `Click zooms ${zoomOut ? "out" : "in"} 4×. Option-click or right-click zooms the other way.` class=Secondary font-size=12 line-height=1.3 padding="0 12px 8px"
+          if view.deepest
+            text "This is the deepest zoom. The GPU's 32-bit numbers cannot go further, so zoom out or pan." font-size=12 line-height=1.3 padding="0 12px 8px" color="#ffb86b" role="status" testId="deepest"
+          else
+            text `Click zooms ${zoomOut ? "out" : "in"} 4×. Option-click or right-click zooms the other way.` class=Secondary font-size=12 line-height=1.3 padding="0 12px 8px"
           text (view.sharp < 16 ? `Sharpening: pass ${view.sharp + 1} of 16` : "") role="status" position="absolute" width=1 height=1 overflow="hidden" opacity=0
         if explainerOpen
           column class=Glass position="absolute" top=16 right=16 bottom=16 width=400 overflow="hidden" testId="explainer"
@@ -533,7 +537,10 @@ component PhoneUi
           Ring(passes=view.sharp)
         text "Zoom" class=Secondary font-size=13
         text `${view.zoomLabel}×` class=Mono font-size=13 font-weight=500 font-variant-numeric="tabular-nums" testId="zoom"
-      text `Tap zooms ${zoomOut ? "out" : "in"} 4×` class=Secondary font-size=12
+      if view.deepest
+        text "Deepest zoom: zoom out or pan" font-size=12 color="#ffb86b" role="status" testId="deepest"
+      else
+        text `Tap zooms ${zoomOut ? "out" : "in"} 4×` class=Secondary font-size=12
     if sheet < 2
       row class=Glass position="absolute" left="50%" translate="-50% 0" bottom=(sheetHeight + 12) align-items="center" gap=4 padding=4 border-radius=14 testId="dock"
         row gap=2 padding=2 border-radius=10 background-color="rgba(255, 255, 255, 0.06)" role="radiogroup" aria-label="Tap to"
