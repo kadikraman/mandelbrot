@@ -422,7 +422,9 @@ impl MandelSurface {
                 if !press.dragged && far > slop {
                     press.dragged = true;
                 }
-                if press.dragged {
+                // On a touch screen a drag only stops the press from being a tap:
+                // the page offers taps there, and no panning.
+                if press.dragged && kind != PointerKind::Touch {
                     self.pan(dx, dy);
                 }
             }
@@ -1379,7 +1381,7 @@ mod tests {
     }
 
     #[test]
-    fn a_forwarded_touch_taps_and_drags() {
+    fn a_forwarded_touch_taps_and_a_drag_does_nothing() {
         let mut s = surface();
         let step = s.target.step;
         let message = |text: &str, at_ms: f64| InputEvent::Message { text: text.into(), at_ms };
@@ -1393,8 +1395,8 @@ mod tests {
         s.input(&message("touch move 430 300", 220.0));
         s.input(&message("touch move 460 300", 240.0));
         s.input(&message("touch up 460 300", 260.0));
-        assert_eq!(s.target.step, zoomed.step);
-        assert!((s.target.cx - (zoomed.cx - 60.0 * zoomed.step)).abs() < 1e-12);
+        // A touch drag neither zooms nor pans.
+        assert_eq!(s.target, zoomed);
     }
 
     #[test]

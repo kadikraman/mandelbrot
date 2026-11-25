@@ -9,7 +9,8 @@ ordinary floating point gives up, and a short explainer beside it. Built with
 ## What it does
 
 - **Click to zoom.** A click zooms 4× around the point under the pointer. Option-click or
-  right-click zooms the other way. Drag pans and the wheel zooms. On a phone, a tap zooms.
+  right-click zooms the other way. Drag pans and the wheel zooms. On a phone, a tap zooms
+  in or out, and there is no panning.
 - **Deep zoom.** The picture stays sharp to about 10³⁴×. There the GPU's 32-bit numbers run out, so
   the zoom stops and the page says so.
 - **An explainer beside the picture: "Why is it cool?"** It comes at three levels: "Like I'm 5",
