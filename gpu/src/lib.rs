@@ -167,7 +167,7 @@ pub struct MandelSurface {
     auto_run: f64,
     /// A tap, drag or scroll stopped the automatic zoom.
     auto_stopped: bool,
-    /// Canvas points on the right that a panel covers; the whole set fits left of them.
+    /// Canvas points on the right that the explainer covers.
     free_right: f32,
     last_ms: Option<f64>,
     last_motion_ms: f64,
@@ -283,11 +283,12 @@ impl MandelSurface {
         self.ease_to(self.target.scaled_about(px, py, factor));
     }
 
-    /// The whole set, centred in the canvas left of `free_right`.
+    /// The whole set, centred in the canvas. It ignores the explainer, so opening
+    /// or closing it never moves or rescales the picture.
     fn home_view(&self) -> View {
-        let step = 3.2 / (self.size.0 - self.free_right).max(1.0) as f64;
+        let step = 3.2 / self.size.0.max(1.0) as f64;
         let (ax, ay) = self.anchor_f64;
-        View { cx: HOME.0 - ax + self.free_right as f64 * 0.5 * step, cy: HOME.1 - ay, step }
+        View { cx: HOME.0 - ax, cy: HOME.1 - ay, step }
     }
 
     /// Back to the whole set.
@@ -361,29 +362,10 @@ impl MandelSurface {
 
     /// A panel opens or closes: the whole set refits; any other view moves by
     /// half the panel's width, so what was centred in the free area stays centred.
+    /// The explainer's width over the canvas; keyboard zoom centres on the area
+    /// left of it.
     fn set_free_right(&mut self, free_right: f32) {
-        if free_right == self.free_right {
-            return;
-        }
-        let shift = (free_right - self.free_right) as f64 * 0.5;
-        let home = self.home_view();
-        let at_home = (self.target.cx - home.cx).abs() < home.step && (self.target.cy - home.cy).abs() < home.step && (self.target.step / home.step - 1.0).abs() < 1e-6;
         self.free_right = free_right;
-        if self.touched && at_home {
-            // The whole set stays whole: it eases to fit the new free area.
-            let home = self.home_view();
-            self.home_step = home.step;
-            self.ease_to(home);
-            return;
-        }
-        if self.touched {
-            self.view.cx += shift * self.view.step;
-            self.target.cx += shift * self.target.step;
-            if let Some(ease) = self.ease.as_mut() {
-                ease.from.cx += shift * ease.from.step;
-            }
-        }
-        self.refit();
     }
 
     fn refit(&mut self) {
@@ -1262,37 +1244,20 @@ mod tests {
     }
 
     #[test]
-    fn the_whole_set_centres_left_of_the_panel() {
+    fn opening_the_panel_never_moves_the_view() {
         let mut s = surface();
+        let home = s.target;
         s.set_free_right(400.0);
-        s.resize(1200.0, 800.0);
-        let (ax, _) = s.anchor_f64;
-        // The set's centre is in the middle of the 800 points left of the panel.
-        let (x, _) = s.plane_at(s.view, 400.0, 400.0);
-        assert!((x + ax - HOME.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn opening_the_panel_keeps_the_view_centred_in_the_free_area() {
-        let mut s = surface();
+        assert_eq!(s.target, home);
         s.click(300.0, 200.0, false);
         s.view = s.target;
         s.ease = None;
-        let before = s.plane_at(s.view, 400.0, 300.0);
+        let zoomed = s.target;
+        s.set_free_right(0.0);
+        assert_eq!((s.view, s.target), (zoomed, zoomed));
         s.set_free_right(400.0);
-        // The free area is now 400 points wide: its centre is at x = 200.
-        let after = s.plane_at(s.view, 200.0, 300.0);
-        assert!((before.0 - after.0).abs() < 1e-12 && (before.1 - after.1).abs() < 1e-12);
-    }
-
-    #[test]
-    fn opening_the_panel_refits_the_whole_set() {
-        let mut s = surface();
-        s.click(300.0, 200.0, false);
         s.reset();
-        s.set_free_right(400.0);
-        let home = s.home_view();
-        assert_eq!((s.target.cx, s.target.cy, s.target.step), (home.cx, home.cy, home.step));
+        assert_eq!(s.target, home);
     }
 
     #[test]
